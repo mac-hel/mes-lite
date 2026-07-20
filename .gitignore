@@ -1,0 +1,44 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+/server
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of go coverage
+*.out
+*.prof
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Temporary
+tmp/
+
+# AI tooling config (user-local)
+.agents/
+.claude/
+.opencode/
+
+# Generated lesson docs
+docs/lessons/
