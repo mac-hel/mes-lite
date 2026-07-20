@@ -38,3 +38,6 @@ tmp/
 # AI tooling config (user-local)
 .claude/
 .opencode/
+
+# personal
+.personal
