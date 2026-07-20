@@ -43,7 +43,15 @@ clean: ## Clean build artifacts
 	rm -f coverage.out coverage.html
 
 docker-up: ## Start development environment
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "Error: Docker is not running. Start Docker and try again."; \
+		exit 1; \
+	fi
 	docker compose up -d
 
 docker-down: ## Stop development environment
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "Error: Docker is not running."; \
+		exit 1; \
+	fi
 	docker compose down

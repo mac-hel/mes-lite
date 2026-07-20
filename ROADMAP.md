@@ -25,12 +25,12 @@ This section must always reflect the current progress.
 **Version:** 1.0
 **Status:** IN PROGRESS
 **Current milestone:** 0 - Development Environment
-**Current lesson:** L1 - Project Foundation
+**Current lesson:** L2 - Docker Environment & First ADR
 **Completed milestones:**
-- none
+- Milestone 0
 **Next milestone:** 1 - Bootstrap HTTP Service
 **Current branch:** main
-**Architecture maturity:** 0 / 10
+**Architecture maturity:** 1 / 10
 **Go knowledge progress:** 5%
 **Interview readiness:** 0%
 **Known technical debt:** None
@@ -1018,6 +1018,10 @@ Optional:
 Status
 
 ✅ Completed
+
+### Lessons
+- L1 — Project Foundation (Git, structure, Go module, tooling)
+- L2 — Docker Environment & First ADR
 
 ### Goal
 

@@ -36,9 +36,5 @@ Thumbs.db
 tmp/
 
 # AI tooling config (user-local)
-.agents/
 .claude/
 .opencode/
-
-# Generated lesson docs
-docs/lessons/
