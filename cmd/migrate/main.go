@@ -9,5 +9,5 @@ import (
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	slog.Info("mes-lite starting")
+	slog.Info("running migrations...")
 }

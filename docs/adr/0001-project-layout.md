@@ -31,12 +31,15 @@ migrations/    # Database migrations
 
 Key rules:
 
-1. **`cmd/`** — each subdirectory produces one binary. The binary name matches the
-   directory name. Currently only `cmd/server/` exists.
-2. **`internal/`** — packages under `internal/` cannot be imported by any module
-   rooted outside this project. This is enforced by the Go compiler.
+1. **`cmd/`** — each subdirectory is `main` package and produces one binary.
+   The binary name matches the directory name. Currently only `cmd/server/`.
+   This is standard convention to organize multiple binaries in single module.
+2. **`internal/`** — packages under `internal/` can be imported only by code
+   rooted at the parent, preventing external consumers (packages) from depending
+   on implementation details. This is enforced by the Go compiler.
 3. **`docs/adr/`** — Architecture Decision Records live here.
 4. **`migrations/`** — SQL migration files managed by `goose`.
+5. **`cmd/server/main.go`** - Composition root is where wiring happens
 
 ## Architecture: Vertical Slices
 
@@ -77,5 +80,60 @@ level. Each capability owns its full vertical slice.
 
 - All application code lives under `internal/`.
 - Adding a new binary means creating a new directory under `cmd/`.
-- No package under `internal/` should ever be imported from outside the module.
+- No package under `internal/` can ever be imported from outside the module.
 - Vertical slice structure means business logic tests live alongside handlers.
+
+## Concepts
+
+### Go Modules
+
+Reference: <https://go.dev/ref/mod#modules-overview>
+
+#### Module
+
+A **module** is a collection of Go packages that are versioned, released, and
+distributed together.
+
+- **Module path** — unique import path (describes where to find module and what
+  it does) declared in `go.mod` , for example:
+  - `golang.org/x/net` — module rooted at the repository root
+  - `golang.org/x/tools/gopls` — module rooted in the `gopls/` subdirectory
+  - `golang.org/x/tools/gopls/v2` — major version 2 module (`/v2` suffix is
+    required for versions ≥2)
+- **Module root** — the directory containing `go.mod`.
+- **Main module** — the module containing the current working directory when a
+  `go` command is executed.
+
+`go.mod` is the module manifest. It declares the module path, Go version, and
+dependencies. Dependency resolution uses **Minimal Version Selection (MVS)**,
+which is deterministic and simpler than constraint-solving approaches used by
+some other package managers.
+
+#### Package
+
+A **package** is a collection of Go source files in the same directory that are
+compiled together.
+
+- **Package path** = `MODULE_PATH/PACKAGE_SUBDIRECTORY`, for example:
+  `golang.org/x/net/html`, where `html` is the package.
+- **Library package** — intended to be imported by other packages; typically
+  named after its directory.
+- **Executable package** — always named `main`; the Go toolchain builds it into
+  an executable binary.
+
+### Project Conventions
+
+- **Go toolchain** — `go build`, `go test`, `go mod`, `go fmt`, `go vet`
+- `internal/version/` follows the standard linker-flag pattern for embedding
+  build information.
+- CI runs tests with `-race` and `-shuffle=on` to detect data races and hidden
+  test-order dependencies.
+- The pre-commit hook runs `go vet` to catch common issues before they reach CI.
+
+## Commands
+```sh
+git init --initial-branch=main --object-format=sha1
+go mod init github.com/mac-hel/mes-lite"
+make install-tools
+chmod +x .githooks/pre-commit && git config core.hooksPath .githooks
+```

@@ -28,6 +28,10 @@ test-cover: ## Run tests with coverage
 	go test ./... -v -count=1 -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 
+install-tools:
+	go install github.com/air-verse/air@latest
+	echo "install 'golangci-lint' with your package manager, e.g.: pacman -S golangci-lint"
+
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
