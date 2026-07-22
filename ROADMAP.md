@@ -22,17 +22,18 @@ Proceed with the project.
 
 This section must always reflect the current progress.
 
-**Version:** 1.0
+**Version:** 1.1
 **Status:** IN PROGRESS
-**Current milestone:** 0 - Development Environment
-**Current lesson:** L2 - Docker Environment & First ADR
+**Current milestone:** 2 - Employees
+**Current lesson:** TBD
 **Completed milestones:**
 - Milestone 0
-**Next milestone:** 1 - Bootstrap HTTP Service
+- Milestone 1
+**Next milestone:** 2 - Employees
 **Current branch:** main
-**Architecture maturity:** 1 / 10
-**Go knowledge progress:** 5%
-**Interview readiness:** 0%
+**Architecture maturity:** 2 / 10
+**Go knowledge progress:** 10%
+**Interview readiness:** 5%
 **Known technical debt:** None
 
 The AI must update this section at the end of every lesson and milestone.
@@ -54,31 +55,31 @@ The AI should update it after every completed milestone.
 - [ ] Modules
 - [ ] Packages
 - [ ] Visibility
-- [ ] Variables
-- [ ] Constants
-- [ ] Functions
-- [ ] Structs
-- [ ] Methods
-- [ ] Receivers
-- [ ] Pointers
+- [x] Variables
+- [x] Constants
+- [x] Functions
+- [x] Structs
+- [x] Methods
+- [x] Receivers
+- [x] Pointers
 - [ ] Interfaces
 - [ ] Embedding
 - [ ] Custom Types
 - [ ] iota
-- [ ] Errors
+- [x] Errors
 - [ ] Error Wrapping
-- [ ] defer
+- [x] defer
 - [ ] panic
-- [ ] Context
+- [x] Context
 - [ ] Generics (intro)
 - [ ] Reflection (overview)
 
 **Standard Library**
-- [ ] net/http
-- [ ] context
-- [ ] errors
+- [x] net/http (via Fuego)
+- [x] context
+- [x] errors
 - [ ] io
-- [ ] encoding/json
+- [x] encoding/json
 - [ ] encoding/csv
 - [ ] strings
 - [ ] bytes
@@ -105,8 +106,8 @@ The AI should update it after every completed milestone.
 
 **Architecture**
 - [ ] Vertical Slice
-- [ ] Dependency Injection
-- [ ] Package Design
+- [x] Dependency Injection
+- [x] Package Design
 - [ ] Repositories
 - [ ] Aggregates
 - [ ] CQRS
@@ -123,10 +124,10 @@ The AI should update it after every completed milestone.
 - [ ] SQL Optimization
 
 **Testing**
-- [ ] Unit Tests
-- [ ] Integration Tests
+- [x] Unit Tests
+- [x] Integration Tests
 - [ ] Table Tests
-- [ ] httptest
+- [x] httptest
 - [ ] Testcontainers
 - [ ] Benchmarks
 - [ ] Fuzz Tests
@@ -142,7 +143,7 @@ The AI should update it after every completed milestone.
 - [ ] Middleware
 - [ ] RoundTripper
 - [ ] Client
-- [ ] Server
+- [x] Server
 
 **SQL**
 - [ ] Isolation Levels
@@ -305,6 +306,8 @@ Optimize for understanding, not speed.
 Never generate an entire feature immediately. Guide the implementation step by step.
 
 ## 2. Incremental Learning
+
+Divide Milestones into Lessons as you see fit.
 
 Each lesson introduces:
 
@@ -1101,7 +1104,7 @@ None.
 
 Status
 
-⬜ Not Started
+✅ Completed
 
 ### Goal
 

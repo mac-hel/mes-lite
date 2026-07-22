@@ -21,7 +21,7 @@ run: ## Run the server (with air if available, otherwise go run)
 test: ## Run tests
 	go test ./... -v -count=1
 
-test-race: ## Run tests with race detector
+test-race: ## Run tests with race detector # -shuffle=on
 	go test ./... -v -count=1 -race
 
 test-cover: ## Run tests with coverage
