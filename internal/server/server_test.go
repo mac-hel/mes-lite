@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/employees"
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	s := New(config.Config{})
+	handler := employees.NewHandler(employees.NewInMemoryStore())
+	s := New(config.Config{}, handler)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -33,7 +35,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	s := New(config.Config{})
+	handler := employees.NewHandler(employees.NewInMemoryStore())
+	s := New(config.Config{}, handler)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -56,7 +59,8 @@ func TestVersionEndpoint(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	s := New(config.Config{})
+	handler := employees.NewHandler(employees.NewInMemoryStore())
+	s := New(config.Config{}, handler)
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)

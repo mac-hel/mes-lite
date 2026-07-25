@@ -136,10 +136,10 @@ No refactoring needed at this point — the code is minimal and follows idiomati
     - `s.SpecHandler()` registers the OpenAPI spec endpoint
     - `s.UIHandler()` registers the Swagger UI
 
-### Improvements for next time
+### Future improvements
 
-- Allow setting environment variables in `.env` file (git-ignored but template `.env.template` commited)
-- Add readiness probe endpoint (for Kubernetes)
+- **DONE:** Allow setting environment variables in `.env` file (git-ignored but template `.env.template` commited)
+- **DONE:** Add readiness probe endpoint (for Kubernetes)
 - Consider structured error responses
 - Add request ID middleware
 

@@ -16,7 +16,8 @@
 
 ## Instructions
 
-Proceed with the project.
+Divide current Milestone into Lessons. Write it to this file.
+Proceed with the first Lesson of current Milestone.
 
 ## STATE
 
@@ -24,16 +25,17 @@ This section must always reflect the current progress.
 
 **Version:** 1.1
 **Status:** IN PROGRESS
-**Current milestone:** 2 - Employees
+**Current milestone:** 3 - Products
 **Current lesson:** TBD
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
+- Milestone 2
 **Next milestone:** 2 - Employees
 **Current branch:** main
-**Architecture maturity:** 2 / 10
-**Go knowledge progress:** 10%
-**Interview readiness:** 5%
+**Architecture maturity:** 4 / 10
+**Go knowledge progress:** 20%
+**Interview readiness:** 10%
 **Known technical debt:** None
 
 The AI must update this section at the end of every lesson and milestone.
@@ -54,7 +56,7 @@ The AI should update it after every completed milestone.
 **Language**
 - [ ] Modules
 - [ ] Packages
-- [ ] Visibility
+- [x] Visibility
 - [x] Variables
 - [x] Constants
 - [x] Functions
@@ -62,12 +64,12 @@ The AI should update it after every completed milestone.
 - [x] Methods
 - [x] Receivers
 - [x] Pointers
-- [ ] Interfaces
+- [x] Interfaces
 - [ ] Embedding
 - [ ] Custom Types
 - [ ] iota
 - [x] Errors
-- [ ] Error Wrapping
+- [x] Error Wrapping
 - [x] defer
 - [ ] panic
 - [x] Context
@@ -1184,7 +1186,13 @@ Maximum new concepts:
 
 Status
 
-⬜ Not Started
+✅ Completed
+
+### Lessons
+
+- **L2.1** — Visibility & Zero Values: Employee Entity
+- **L2.2** — Constructors & Slices: Creating & Listing Employees
+- **L2.3** — Error Wrapping, Validation & Maps: Updating, Deactivating & Testing
 
 ### Goal
 
