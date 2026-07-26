@@ -2,7 +2,7 @@
 
 APP_NAME = mes-lite
 CMD_DIR = ./cmd/server
-BUILD_DIR = ./bin
+BUILD_DIR = ./out
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -59,3 +59,6 @@ docker-down: ## Stop development environment
 		exit 1; \
 	fi
 	docker compose down
+
+self-request:
+	./bin/self-request.sh

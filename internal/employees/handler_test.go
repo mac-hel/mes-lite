@@ -43,6 +43,29 @@ func TestHandler_Create(t *testing.T) {
 	}
 }
 
+func TestHandler_DuplicateCreate(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(store)
+
+	s := fuego.NewServer()
+	fuego.Post(s, "/employees", handler.Create)
+
+	body := `{"id":"001","firstName":"John","lastName":"Doe","email":"john@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/employees", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	req = httptest.NewRequest(http.MethodPost, "/employees", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandler_Create_Validation(t *testing.T) {
 	tests := []struct {
 		name       string

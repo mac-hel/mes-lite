@@ -16,7 +16,7 @@ type Config struct {
 func Load() Config {
 	cfg := Config{
 		Host: "0.0.0.0",
-		Port: 8080,
+		Port: 9090,
 	}
 
 	if host := os.Getenv("HOST"); host != "" {

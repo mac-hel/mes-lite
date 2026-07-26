@@ -304,77 +304,24 @@ when necessary.
 
 # Errors
 
-Errors are values:
-
-```go
-if err != nil {
-    ...
-}
-```
+Errors are values: `if err != nil { ... }`
+Sentinel error: `var ErrNotFound = errors.New("not found")`
+    - Useful when callers need only a category.
+    - Potential downside: exported sentinel becomes API coupling
+Typed error: `type ValidationError struct { Field string }`
+    - Useful when the caller needs structured information.
 
 ## Wrapping
+**wrap** to add context at abstraction boundaries, `%w` preserves the error chain:
+`fmt.Errorf("load user %q: %w", id, err)`
 
-```go
-return fmt.Errorf("load user %q: %w", id, err)
-```
-
-`%w` preserves the error chain.
-
-Inspection:
-
-```go
-errors.Is(err, sql.ErrNoRows)
-```
-
-```go
-var e *ValidationError
-if errors.As(err, &e) {
-    ...
-}
-```
-
-Prefer `errors.Is`/`errors.As` over equality or type assertions when errors may be wrapped.
-
-## Sentinel error
-
-```go
-var ErrNotFound = errors.New("not found")
-```
-
-Useful when callers need only a category.
-
-Potential downside:
-
-* exported sentinel becomes API coupling
-
-## Typed error
-
-```go
-type ValidationError struct {
-    Field string
-}
-```
-
-Useful when the caller needs structured information.
+**Inspect** (is recursive), prefer `errors.Is`/`errors.As` over `equality` or `type assertions` when errors may be wrapped:
+`if errors.Is(err, sql.ErrNoRows) { ... }`
+`var e *ValidationError; if errors.As(err, &e) { ... }`
 
 ## Error ownership
-
-Add context at abstraction boundaries:
-
-```go
-return fmt.Errorf("read customer %s: %w", id, err)
-```
-
-but avoid repeatedly wrapping with meaningless text.
-
-Do not normally both:
-
-```go
-log.Error(...)
-return err
-```
-
-at every layer; that often causes duplicate logs.
+- avoid repeatedly wrapping with meaningless text
+- do not log and return error at every layer; that often causes duplicate logs
 
 ---
 
@@ -1235,244 +1182,90 @@ Arrays are less common directly; slices are usually the user-facing abstraction.
 
 # Slices
 
-A slice is a small descriptor referring to an underlying array.
-
-Conceptually:
-
-```text
-pointer → backing array
-length
-capacity
-```
-
-Example:
+A slice is a small descriptor referring to an underlying array, has current length and max capacity.
+`pointer → backing array + length + capacity`
+Lookup: O(n)
 
 ```go
-s := make([]int, 3, 10)
+var s []int                 // nil,     len(s) == 0 , cap(s) == ?
+s := []int{1, 2, 3}         // non-nil, len(s) == 3 , cap(s) == ?
+s := make([]int, 4, 10)     // non-nil, len(s) == 4 , cap(s) == 10
+
+b := s                  // copies reference; NOT independent copy: both refer to the dame backing array
+b[0] = 99               // now s[0] == 99
+
+s = append(s, 23)       // if capacity insufficient, append will: allocate new backing array, copy elements
 ```
-
-```text
-len(s) == 3
-cap(s) == 10
-```
-
-The precise runtime representation is an implementation detail, but this three-part model is useful for reasoning.
-
-## Assignment copies the descriptor
-
-```go
-a := []int{1, 2, 3}
-b := a
-
-b[0] = 99
-```
-
-Now:
-
-```go
-a[0] == 99
-```
-
-because both slices refer to the same backing array.
-
----
 
 ## Subslice aliases memory
-
-```go
-a := []int{1, 2, 3, 4}
-b := a[1:3]
-```
-
-`a` and `b` share backing storage.
-
-Changes may be visible through both.
-
-This can also accidentally retain a large backing array:
-
+Slice and subslice share backing storage - changes may be visible through both slices.
 ```go
 huge := loadHugeBuffer()
-tiny := huge[:10]
+tiny := huge[2:10]              // elements 2-9; [:10] elements 0-9; [2:] elements 2-LAST
 ```
-
-`tiny` may keep the entire backing array reachable.
 
 Copy when necessary:
-
 ```go
 tiny := append([]byte(nil), huge[:10]...)
-```
-
-or:
-
-```go
+    // or
 tiny := make([]byte, 10)
 copy(tiny, huge[:10])
 ```
 
----
-
-## `append`
-
-```go
-s = append(s, value)
-```
-
-If capacity is available:
-
-* backing array may remain the same
-
-If insufficient:
-
-* a new backing array is allocated
-* existing elements are copied
-* returned slice points to the new array
-
-Therefore always use the result:
-
-```go
-s = append(s, x)
-```
-
-not:
-
-```go
-append(s, x) // result discarded
-```
-
-The Go documentation describes slice growth in terms of allocating a larger backing array when capacity is exhausted.
-
----
-
 ## Nil vs empty slice
-
+Both are valid for operations:  `range, append, len, cap`
+But they can differ under:      `== nil`, JSON encoding, reflection, some API contracts
 ```go
-var a []int        // nil
-b := []int{}       // non-nil, length 0
-c := make([]int,0) // non-nil, length 0
+var a []int        // nil,      length 0
+b := []int{}       // non-nil,  length 0
+c := make([]int,0) // non-nil,  length 0
 ```
-
-All have:
-
-```go
-len(...) == 0
-```
-
-Both nil and empty slices are valid for:
-
-```go
-range
-append
-len
-cap
-```
-
-But they can differ under:
-
-* `== nil`
-* JSON encoding
-* reflection
-* some API contracts
 
 ---
 
 # Maps
 
-```go
-m := make(map[string]User)
-```
-
-Maps are runtime-managed structures with reference-like behavior.
-
-Assignment:
+Runtime-managed structures with reference-like behavior.
+Lookup: O(1)
 
 ```go
-m2 := m
+m := make(map[string]User)  // initialize (memory) - map must be initialized before writing
+m["x"] = 1                  // write entry
+
+m2 := m                     // copies reference; NOT independent copy: mutation of one's entries is visible through the other
 ```
-
-does **not** create an independent copy of all entries.
-
-Mutation through one is visible through the other.
-
----
 
 ## Nil map
-
+Safe to use (but 0 values) except for writing.
 ```go
-var m map[string]int
+var m map[string]int    // nil map
+v := m["x"]             // 0
+len(m)                  // 0
+delete(m,"x")           // safe
+m["x"] = 1              // INVALID - panic
 ```
-
-Valid:
-
-```go
-v := m["x"]   // 0
-len(m)        // 0
-delete(m,"x") // safe
-```
-
-Invalid:
-
-```go
-m["x"] = 1 // panic
-```
-
-Initialize before writing:
-
-```go
-m = make(map[string]int)
-```
-
----
 
 ## Missing key
-
+Zero is returned for absent values; use `ok`.
 ```go
-v := m[key]
+v := m[key]         // returns the value type's zero value when absent
+v, ok := m[key]     // to distinguish absent from a stored zero value
+    if !ok { ... }
 ```
-
-returns the value type's zero value when absent.
-
-To distinguish absent from a stored zero value:
-
-```go
-v, ok := m[key]
-if !ok {
-    ...
-}
-```
-
----
 
 ## Map iteration
-
-Iteration order is unspecified.
-
-Never rely on:
-
+Sort keys explicitly when deterministic output matters.
 ```go
-for k := range m
+for k := range m    // iteration order is unspecified
 ```
 
-producing a deterministic order.
-
-Sort keys explicitly when deterministic output matters.
-
----
-
 ## Map concurrency
-
-Ordinary maps are not generally safe for unsynchronized concurrent read/write access.
-
-Typical options:
-
+Ordinary maps are not generally safe for unsynchronized concurrent read/write access, typically needs:
 ```go
 sync.Mutex
 sync.RWMutex
-sync.Map
+sync.Map        // specialized; a normal map protected by a mutex is often clearer
 ```
-
-`sync.Map` is specialized; a normal map protected by a mutex is often clearer.
-
 ---
 
 # Slice-backed vs map-backed in-memory store

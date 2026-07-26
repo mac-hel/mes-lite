@@ -16,8 +16,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("expected default host 0.0.0.0, got %s", cfg.Host)
 	}
 
-	if cfg.Port != 8080 {
-		t.Errorf("expected default port 8080, got %d", cfg.Port)
+	if cfg.Port != 9090 {
+		t.Errorf("expected default port 9090, got %d", cfg.Port)
 	}
 }
 
@@ -41,10 +41,10 @@ func TestLoadFromEnv(t *testing.T) {
 }
 
 func TestAddr(t *testing.T) {
-	cfg := Config{Host: "0.0.0.0", Port: 8080}
+	cfg := Config{Host: "0.0.0.0", Port: 9090}
 
-	if got := cfg.Addr(); got != "0.0.0.0:8080" {
-		t.Errorf("expected 0.0.0.0:8080, got %s", got)
+	if got := cfg.Addr(); got != "0.0.0.0:9090" {
+		t.Errorf("expected 0.0.0.0:9090, got %s", got)
 	}
 }
 

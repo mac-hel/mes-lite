@@ -27,6 +27,10 @@ type InMemoryStore struct {
 
 // Save stores an employee keyed by ID.
 func (s *InMemoryStore) Save(_ context.Context, emp Employee) error {
+	_, ok := s.employees[emp.ID]
+	if ok {
+		return fmt.Errorf("employee %q: %w", emp.ID, ErrAlreadyExists)
+	}
 	s.employees[emp.ID] = emp
 	return nil
 }

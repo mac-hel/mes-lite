@@ -36,7 +36,12 @@ func (h *Handler) Create(c fuego.ContextWithBody[CreateEmployeeRequest]) (Employ
 	emp := NewEmployee(body.ID, body.FirstName, body.LastName, body.Email)
 
 	if err := h.store.Save(c.Context(), emp); err != nil {
-		return Employee{}, err
+		if errors.Is(err, ErrAlreadyExists) {
+			return Employee{}, fuego.ConflictError{
+				Err:    err,
+				Detail: fmt.Sprintf("employee %q already exists", emp.ID),
+			}
+		}
 	}
 
 	return emp, nil
