@@ -62,3 +62,11 @@ docker-down: ## Stop development environment
 
 self-request:
 	./bin/self-request.sh
+
+# peak hours: 3-6 i 9-12
+opencode-ds-r:
+	DEEPSEEK_API_KEY=$(DEEPSEEK_API_KEY) opencode --model deepseek/deepseek-v4-pro
+opencode-gpt-r:
+	opencode --model openai/gpt-5.4
+opencode-gpt-h:
+	opencode --model openai/gpt-5.5

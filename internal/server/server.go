@@ -14,6 +14,7 @@ import (
 
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/version"
 )
 
@@ -24,7 +25,7 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, empHandler *employees.Handler) *Server {
+func New(cfg config.Config, empHandler *employees.Handler, prodHandler *products.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 	)
@@ -37,6 +38,12 @@ func New(cfg config.Config, empHandler *employees.Handler) *Server {
 	fuego.Get(s, "/employees", empHandler.List)
 	fuego.Put(s, "/employees/{id}", empHandler.Update)
 	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate)
+
+	fuego.Post(s, "/products", prodHandler.Create)
+	fuego.Get(s, "/products", prodHandler.List)
+	fuego.Get(s, "/products/search", prodHandler.Search)
+	fuego.Put(s, "/products/{sku}", prodHandler.Update)
+	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate)
 
 	return &Server{Server: s, cfg: cfg}
 }

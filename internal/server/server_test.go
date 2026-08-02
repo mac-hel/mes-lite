@@ -8,11 +8,16 @@ import (
 
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/products"
 )
 
+func testHandlers() (*employees.Handler, *products.Handler) {
+	return employees.NewHandler(employees.NewInMemoryStore()), products.NewHandler(products.NewInMemoryStore())
+}
+
 func TestHealthEndpoint(t *testing.T) {
-	handler := employees.NewHandler(employees.NewInMemoryStore())
-	s := New(config.Config{}, handler)
+	empH, prodH := testHandlers()
+	s := New(config.Config{}, empH, prodH)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -35,8 +40,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	handler := employees.NewHandler(employees.NewInMemoryStore())
-	s := New(config.Config{}, handler)
+	empH, prodH := testHandlers()
+	s := New(config.Config{}, empH, prodH)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -59,8 +64,8 @@ func TestVersionEndpoint(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	handler := employees.NewHandler(employees.NewInMemoryStore())
-	s := New(config.Config{}, handler)
+	empH, prodH := testHandlers()
+	s := New(config.Config{}, empH, prodH)
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)

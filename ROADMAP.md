@@ -17,25 +17,26 @@
 ## Instructions
 
 Divide current Milestone into Lessons. Write it to this file.
-Proceed with the first Lesson of current Milestone.
+Proceed with the next Lesson of current Milestone.
 
 ## STATE
 
 This section must always reflect the current progress.
 
-**Version:** 1.1
+**Version:** 1.3
 **Status:** IN PROGRESS
-**Current milestone:** 3 - Products
-**Current lesson:** TBD
+**Current milestone:** 4 - Production Registration
+**Current lesson:** Not started
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
 - Milestone 2
-**Next milestone:** 2 - Employees
+- Milestone 3
+**Next milestone:** 5 - Persistence & Data Access
 **Current branch:** main
 **Architecture maturity:** 4 / 10
-**Go knowledge progress:** 20%
-**Interview readiness:** 10%
+**Go knowledge progress:** 22%
+**Interview readiness:** 12%
 **Known technical debt:** None
 
 The AI must update this section at the end of every lesson and milestone.
@@ -66,8 +67,8 @@ The AI should update it after every completed milestone.
 - [x] Pointers
 - [x] Interfaces
 - [ ] Embedding
-- [ ] Custom Types
-- [ ] iota
+- [x] Custom Types
+- [x] iota
 - [x] Errors
 - [x] Error Wrapping
 - [x] defer
@@ -83,7 +84,7 @@ The AI should update it after every completed milestone.
 - [ ] io
 - [x] encoding/json
 - [ ] encoding/csv
-- [ ] strings
+- [x] strings
 - [ ] bytes
 - [ ] time
 - [ ] sync
@@ -107,7 +108,7 @@ The AI should update it after every completed milestone.
 - [ ] Race Detector
 
 **Architecture**
-- [ ] Vertical Slice
+- [x] Vertical Slice
 - [x] Dependency Injection
 - [x] Package Design
 - [ ] Repositories
@@ -128,7 +129,8 @@ The AI should update it after every completed milestone.
 **Testing**
 - [x] Unit Tests
 - [x] Integration Tests
-- [ ] Table Tests
+- [x] Sanity Tests
+- [x] Table Tests
 - [x] httptest
 - [ ] Testcontainers
 - [ ] Benchmarks
@@ -168,14 +170,14 @@ The primary goal is to learn by building a real-world production application and
 
 The application is only the vehicle used to learn:
 
-- idiomatic Go
-- production architecture
-- concurrency
-- testing
-- observability
 - software design
-- production engineering
+- idiomatic Go
+- concurrency
+- observability
 - reviewing Go code
+- testing
+- production engineering
+- production architecture
 - deploying production services
 - contributing to mature Go codebases
 
@@ -189,9 +191,9 @@ After completing this roadmap I should be able to:
 
 ## Go
 
-- write idiomatic Go
 - understand Go philosophy
 - understand why Go is different from Java/PHP/C#
+- write idiomatic Go
 - use the standard library effectively
 - know when NOT to introduce abstractions
 - design cohesive packages
@@ -259,6 +261,7 @@ Become comfortable writing:
 
 - unit tests
 - integration tests
+- sanity tests
 - table tests
 - benchmarks
 - fuzz tests
@@ -776,6 +779,7 @@ Understanding SQL is considered a required Senior Go skill.
 
 The testing strategy should prefer integration tests whenever they provide more
 confidence than mocks.
+Sanity tests only where appropriate.
 
 ## Documentation
 - `OpenAPI` (automatically generated through Fuego)
@@ -1265,7 +1269,13 @@ The company can register employees who perform production work.
 
 Status
 
-⬜ Not Started
+✅ Completed
+
+### Lessons
+
+- **L3.1** — Custom Types & iota: Product Entity ✅
+- **L3.2** — Stringer & strings: Product Handlers & Search ✅
+- **L3.3** — Value Objects & Testing: Product Validation & Review ✅
 
 ### Goal
 

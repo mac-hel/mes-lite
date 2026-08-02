@@ -7,6 +7,7 @@ import (
 
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/server"
 )
 
@@ -19,7 +20,10 @@ func main() {
 	empStore := employees.NewInMemoryStore()
 	empHandler := employees.NewHandler(empStore)
 
-	srv := server.New(cfg, empHandler)
+	prodStore := products.NewInMemoryStore()
+	prodHandler := products.NewHandler(prodStore)
+
+	srv := server.New(cfg, empHandler, prodHandler)
 
 	if err := srv.Start(context.Background()); err != nil {
 		slog.Error("server shutdown with error", "err", err)

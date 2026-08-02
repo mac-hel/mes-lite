@@ -1,6 +1,6 @@
 # Go — senior engineer crib
 
-> last incorporated lesson: M02-L002-Employee_Construct_&_Basic_Handlers.md
+> last incorporated lesson: M03-L001
 
 ## Modules, packages, layout
 
@@ -1452,40 +1452,37 @@ Heap allocations increase garbage-collector work, while stack allocations are ge
 
 ---
 
-# Strings
+# Strings (stdlib package)
 
-A string is immutable byte data.
-
-Useful conceptual model:
-
-```text
-pointer to bytes
-length
-```
-
-but again, exact representation is an implementation detail.
-
-Important:
+Immutable byte data: `pointer to bytes + length`; exact representation is an implementation detail.
 
 ```go
-len(s)
+len(s)                  // counts **bytes**, not Unicode characters.
+for _, r := range s     // iterates UTF-8 decoded runes (int32 representing Unicode code point)
 ```
+strings.ToLower
+strings.Contains
 
-counts **bytes**, not Unicode characters.
+## Stringer interface
+`fmt.Stringer` interface (`String() string`) - `fmt.Print`, `%s`, `%v` all produce a readable label; useful for logging and JSON serialization.
 
 ```go
-for _, r := range s
+func (c ProductCategory) String() string { switch c { case CategoryVentilation: return "Ventilation"
 ```
 
-iterates UTF-8 decoded runes.
+---
 
-A rune is:
+# Custom Types (enums)
+
+Gives domain meaning to primitives and compile-time type safety - can't accidentally pass a raw `int` where a `ProductCategory` is expected.
 
 ```go
-int32
+type ProductCategory int                            // custom int type
+const (
+	CategoryVentilation ProductCategory = iota      // constant generator (1st=0, each subseqquent auto-icrements)
+	CategoryFilter
+)
 ```
-
-representing a Unicode code point.
 
 ---
 
