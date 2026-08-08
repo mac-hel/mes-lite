@@ -1,4 +1,4 @@
-.PHONY: build test lint clean run help
+.PHONY: build test lint clean run migrate sqlc help
 
 APP_NAME = mes-lite
 CMD_DIR = ./cmd/server
@@ -17,6 +17,12 @@ run: ## Run the server (with air if available, otherwise go run)
 	else \
 		go run $(CMD_DIR); \
 	fi
+
+migrate: ## Run database migrations
+	go run ./cmd/migrate
+
+sqlc: ## Generate sqlc database code
+	sqlc generate
 
 test: ## Run tests
 	go test ./... -v -count=1
@@ -62,6 +68,13 @@ docker-down: ## Stop development environment
 
 self-request:
 	./bin/self-request.sh
+
+db-sql:
+	docker compose exec -T postgres psql -U meslite -d meslite -c "\d production_entries"
+	docker compose exec -T postgres psql -U meslite -d meslite -c "select version_id, is_applied from goose_db_version order by id;"
+
+teach-continue:
+	opencode -s ses_01f30ed40ffej0GpLi0eIgh9Yz
 
 # peak hours: 3-6 i 9-12
 opencode-ds-r:

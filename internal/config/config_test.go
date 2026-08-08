@@ -9,6 +9,8 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	_ = os.Unsetenv("HOST")
 	_ = os.Unsetenv("PORT")
+	_ = os.Unsetenv("DATABASE_URL")
+	_ = os.Unsetenv("MIGRATIONS_DIR")
 
 	cfg := Load()
 
@@ -19,14 +21,26 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Port != 9090 {
 		t.Errorf("expected default port 9090, got %d", cfg.Port)
 	}
+
+	if cfg.DatabaseURL != "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable" {
+		t.Errorf("expected default database URL, got %s", cfg.DatabaseURL)
+	}
+
+	if cfg.MigrationsDir != "migrations" {
+		t.Errorf("expected default migrations dir migrations, got %s", cfg.MigrationsDir)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
 	_ = os.Setenv("HOST", "127.0.0.1")
 	_ = os.Setenv("PORT", "9090")
+	_ = os.Setenv("DATABASE_URL", "postgres://example")
+	_ = os.Setenv("MIGRATIONS_DIR", "db/migrations")
 	defer func() {
 		_ = os.Unsetenv("HOST")
 		_ = os.Unsetenv("PORT")
+		_ = os.Unsetenv("DATABASE_URL")
+		_ = os.Unsetenv("MIGRATIONS_DIR")
 	}()
 
 	cfg := Load()
@@ -37,6 +51,14 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if cfg.Port != 9090 {
 		t.Errorf("expected port 9090, got %d", cfg.Port)
+	}
+
+	if cfg.DatabaseURL != "postgres://example" {
+		t.Errorf("expected database URL from env, got %s", cfg.DatabaseURL)
+	}
+
+	if cfg.MigrationsDir != "db/migrations" {
+		t.Errorf("expected migrations dir from env, got %s", cfg.MigrationsDir)
 	}
 }
 

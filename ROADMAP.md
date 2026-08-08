@@ -23,21 +23,22 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 1.3
+**Version:** 1.7
 **Status:** IN PROGRESS
-**Current milestone:** 4 - Production Registration
+**Current milestone:** 5 - Persistence & Data Access
 **Current lesson:** Not started
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
 - Milestone 2
 - Milestone 3
-**Next milestone:** 5 - Persistence & Data Access
+- Milestone 4
+**Next milestone:** 6 - Authentication & Authorization
 **Current branch:** main
-**Architecture maturity:** 4 / 10
-**Go knowledge progress:** 22%
-**Interview readiness:** 12%
-**Known technical debt:** None
+**Architecture maturity:** 5 / 10
+**Go knowledge progress:** 30%
+**Interview readiness:** 20%
+**Known technical debt:** Employees and products remain in-memory until Milestone 5; production reference validation is not fully transactionally consistent yet.
 
 The AI must update this section at the end of every lesson and milestone.
 
@@ -86,10 +87,10 @@ The AI should update it after every completed milestone.
 - [ ] encoding/csv
 - [x] strings
 - [ ] bytes
-- [ ] time
+- [x] time
 - [ ] sync
 - [ ] sync/atomic
-- [ ] database/sql (concepts)
+- [x] database/sql (concepts)
 - [ ] log/slog
 - [ ] runtime
 - [ ] embed
@@ -111,7 +112,7 @@ The AI should update it after every completed milestone.
 - [x] Vertical Slice
 - [x] Dependency Injection
 - [x] Package Design
-- [ ] Repositories
+- [x] Repositories
 - [ ] Aggregates
 - [ ] CQRS
 - [ ] Event-driven Architecture
@@ -119,9 +120,9 @@ The AI should update it after every completed milestone.
 - [ ] Production Readiness
 
 **Persistence**
-- [ ] PostgreSQL
-- [ ] pgx
-- [ ] sqlc
+- [x] PostgreSQL
+- [x] pgx
+- [x] sqlc
 - [ ] Transactions
 - [ ] Optimistic Locking
 - [ ] SQL Optimization
@@ -1342,7 +1343,335 @@ Employees can register production for real products.
 
 Status
 
-⬜ Not Started
+✅ Completed
+
+### Lessons
+
+- **L4.1** — Production Entry Domain & HTTP Registration ✅
+- **L4.2** — PostgreSQL, Migrations & sqlc Setup ✅
+- **L4.3** — Repository Implementation & Context Propagation ✅
+- **L4.4** — Transaction Boundary & Business Validation Review ✅
+
+### Lesson 4.1 Completion Notes
+
+#### Business Context
+
+Production workers need to record completed work without Excel.
+
+#### Problem
+
+The system had employees and products, but no core production-registration capability.
+
+#### Design Discussion
+
+The first implementation keeps the vertical slice small: `internal/production` owns the production entry entity, validation, in-memory persistence contract and HTTP handler. PostgreSQL, sqlc and transactions are intentionally postponed to later lessons because introducing them before the business model would hide the domain rules inside infrastructure work.
+
+#### Go Concepts
+
+- `time.Time` for business timestamps
+- `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
+- error wrapping with sentinel errors
+- context propagation from HTTP handler to store
+
+#### Architecture Concepts
+
+- vertical slice for production registration
+- package naming that avoids stutter: `production.Entry`, not `production.ProductionEntry`
+- concrete in-memory implementation before persistence abstraction grows
+
+#### Implementation
+
+- Added `POST /production-entries`.
+- Added `production.Entry` with employee, product, quantity, workstation, timestamp and comment.
+- Added production entry validation and UUID-shaped ID generation.
+- Wired production handler through the server composition root.
+
+#### Tests
+
+- Domain validation tests added.
+- In-memory store tests added.
+- HTTP registration tests added.
+- Server route test added.
+
+#### Refactoring
+
+- Renamed `ProductionEntry` to `Entry` after lint identified package-name stutter.
+
+#### Code Review
+
+- An experienced Go engineer would likely approve the scope for this lesson because it is small, explicit and tested.
+- Remaining gap: employee/product existence is not validated yet; this belongs in the next application-service/persistence lessons where the transaction boundary can be designed properly.
+
+#### Exercises
+
+- Explain why `production.Entry` is a better exported name than `production.ProductionEntry`.
+- Add a table test for future maximum comment length validation.
+- Explain why timestamps are normalized to UTC.
+
+#### Interview Questions
+
+- Why is `time.Time` usually preferred over strings for timestamps in Go APIs?
+- What does error wrapping give us when translating domain errors to HTTP errors?
+- Why should `context.Context` be passed from the handler to persistence code?
+- Why is package-name stutter considered non-idiomatic Go?
+
+#### Roadmap Update
+
+- Lesson 4.1 completed.
+- Current lesson moved to Lesson 4.2.
+- Standard Library `time` marked complete in the Knowledge Matrix.
+
+### Lesson 4.2 Completion Notes
+
+#### Business Context
+
+Production entries are core business records. Keeping them only in memory would lose production history and fail the business goal of replacing Excel.
+
+#### Problem
+
+The project had PostgreSQL available in Docker, but no schema migrations, no sqlc configuration and no executable migration command.
+
+#### Design Discussion
+
+The database contract now starts with production entries only. This avoids a large persistence rewrite and keeps the lesson focused on PostgreSQL, migrations and sqlc. The SQL schema owns non-negotiable data integrity rules such as positive quantity and non-blank workstation, while Go still validates early for better API errors.
+
+#### Go Concepts
+
+- `database/sql` as a stable standard-library abstraction for migration tooling
+- blank imports for database driver registration
+- defers and why `os.Exit` must not bypass cleanup
+- generated code boundaries
+
+#### Architecture Concepts
+
+- SQL-first persistence design
+- migration files as versioned database history
+- sqlc-generated query package kept inside the production vertical slice
+- dependency direction preserved: HTTP still does not depend directly on generated SQL code
+
+#### Implementation
+
+- Added `migrations/0001_create_production_entries.sql`.
+- Added `sqlc.yaml`.
+- Added `internal/production/queries/entries.sql`.
+- Generated `internal/production/productiondb` with typed sqlc queries.
+- Implemented `cmd/migrate` using `pgx` through `database/sql` and `goose`.
+- Added `DATABASE_URL` and `MIGRATIONS_DIR` configuration.
+- Added `make migrate` and `make sqlc` targets.
+
+#### Tests
+
+- Configuration tests cover database and migration environment variables.
+- Generated sqlc code is compiled by `go test ./...` and `go build ./...`.
+- Live migration execution passed against local PostgreSQL with `make migrate`.
+- Verified the `production_entries` schema and goose version table through `psql`.
+
+#### Refactoring
+
+- Refactored `cmd/migrate` to return an exit code from `run()` instead of calling `os.Exit` before defers execute.
+
+#### Code Review
+
+- An experienced Go engineer would approve the direction: SQL is explicit, generated code is isolated and migrations are versioned.
+- Remaining gap: the HTTP handler still uses the in-memory store. This is intentional; Lesson 4.3 will introduce a PostgreSQL-backed repository and wire context propagation through it.
+
+#### Exercises
+
+- Explain why `CHECK (quantity > 0)` belongs in the database even though Go also validates quantity.
+- Inspect the `production_entries` table with `psql` and identify every database constraint.
+- Modify `entries.sql`, rerun `make sqlc`, and inspect the generated type changes.
+
+#### Interview Questions
+
+- Why choose sqlc instead of an ORM?
+- What is the role of migrations in production systems?
+- Why does `database/sql` need a blank driver import?
+- Why is it dangerous to call `os.Exit` before deferred cleanup runs?
+
+#### Roadmap Update
+
+- Lesson 4.2 completed.
+- Current lesson moved to Lesson 4.3.
+- `database/sql`, PostgreSQL, pgx and sqlc marked complete in the Knowledge Matrix.
+
+### Lesson 4.3 Completion Notes
+
+#### Business Context
+
+Production entries now need to survive application restarts. The production registration endpoint must write to PostgreSQL instead of only using in-memory state.
+
+#### Problem
+
+The project had a schema and sqlc queries, but the running application still used `production.InMemoryStore`.
+
+#### Design Discussion
+
+The handler continues to depend on the small `production.Store` interface. The new PostgreSQL store adapts sqlc-generated database types to the domain `production.Entry` type. This keeps generated code out of HTTP handlers and preserves the package boundary.
+
+#### Go Concepts
+
+- `context.Context` propagation from HTTP handler to pgx/sqlc calls
+- adapter code between generated persistence models and domain models
+- error translation with `errors.Is` and `errors.As`
+- integer-size boundary between Go `int` and PostgreSQL `integer`
+
+#### Architecture Concepts
+
+- repository implementation inside the production vertical slice
+- generated SQL package isolated below domain/application code
+- composition root chooses concrete dependencies
+- infrastructure errors translated to domain errors
+
+#### Implementation
+
+- Added `production.PostgresStore` backed by sqlc queries.
+- Added UUID conversion helpers between string IDs and `pgtype.UUID`.
+- Mapped PostgreSQL duplicate-key and constraint errors to domain errors.
+- Wired `cmd/server` to use `pgxpool` and `production.NewPostgresStore`.
+- Refactored `cmd/server` to use `run() int` so database pool cleanup defers run before process exit.
+- Added a quantity overflow guard because PostgreSQL `integer` is 32-bit.
+
+#### Tests
+
+- Added PostgreSQL repository integration tests for save/find, duplicate detection, not found and invalid UUID handling.
+- Tests run migrations before exercising the repository.
+- Tests skip only when PostgreSQL is unavailable.
+- Verified with local Docker PostgreSQL running.
+
+#### Refactoring
+
+- Preserved the existing in-memory store for fast handler tests.
+- Kept the `Store` interface consumer-owned by the handler package slice instead of exposing sqlc directly.
+
+#### Code Review
+
+- An experienced Go engineer would approve this direction because the generated persistence code is isolated, domain errors are preserved and context reaches the database call.
+- Remaining gap: registering production does not yet validate employee/product existence in one transaction. Lesson 4.4 will define that transactional boundary and business validation strategy.
+
+#### Exercises
+
+- Explain why the handler should not return `productiondb.ProductionEntry` directly.
+- Add a test that proves PostgreSQL rejects invalid quantity even if application validation is bypassed.
+- Trace `c.Context()` from the Fuego handler to `pgx.QueryRow`.
+
+#### Interview Questions
+
+- Why do repositories often translate infrastructure errors into domain errors?
+- Why should generated sqlc code not become the public API of the business package?
+- What happens when a request context is cancelled while pgx is waiting on a query?
+- Why must Go code care that PostgreSQL `integer` is 32-bit?
+
+#### Roadmap Update
+
+- Lesson 4.3 completed.
+- Current lesson moved to Lesson 4.4.
+- Repositories marked complete in the Knowledge Matrix.
+
+### Lesson 4.4 Completion Notes
+
+#### Business Context
+
+Production workers must not register work for unknown or inactive employees/products. Without this rule, reports would contain production that cannot be assigned to valid business records.
+
+#### Problem
+
+The endpoint persisted production entries, but it only validated entry shape. It did not validate whether referenced employees/products existed or were active.
+
+#### Design Discussion
+
+The production slice now has an application service that coordinates business validation and persistence. The handler parses HTTP and translates errors. The service validates references and calls the store. The store persists the entry.
+
+The transaction-boundary decision is explicit: today there is only one PostgreSQL write for production entries, while employees/products are still in-memory. A database transaction would not make this cross-resource validation atomic yet. Full transactional consistency requires moving employees/products to PostgreSQL in Milestone 5 and then validating references using database constraints or a single transaction.
+
+#### Go Concepts
+
+- consumer-owned interfaces for employee/product lookups
+- error translation across HTTP, service and persistence boundaries
+- direct struct conversion when request and command shapes match
+- context propagation through handler, service and repository
+
+#### Architecture Concepts
+
+- application service as a business coordination boundary
+- transaction boundary belongs around a complete business operation, not around arbitrary function calls
+- explicit technical debt when consistency cannot yet be guaranteed by the current persistence model
+
+#### Implementation
+
+- Added `production.Service` and `RegisterCommand`.
+- Added employee/product lookup interfaces owned by the production consumer.
+- Added business errors for missing/inactive employees and products.
+- Updated the handler to delegate registration to the service.
+- Updated the server composition root to share employee/product stores with production validation.
+- Preserved the PostgreSQL-backed production entry store.
+
+#### Tests
+
+- Added service tests for valid registration.
+- Added service tests for missing employee, inactive employee, missing product, inactive product and invalid entry data.
+- Updated handler/server tests to use seeded employee/product stores.
+- Verified PostgreSQL migrations and repository tests with local Docker PostgreSQL running.
+
+#### Refactoring
+
+- Moved ID generation and entry construction out of the handler and into the service.
+- Kept in-memory stores for employees/products until Milestone 5 rather than doing a large persistence rewrite inside this lesson.
+
+#### Code Review
+
+- An experienced Go engineer would approve the application-service boundary and error mapping.
+- An experienced Go engineer would not consider the cross-resource consistency story complete yet because employees/products are not persisted in PostgreSQL. This is documented technical debt and is the natural input to Milestone 5.
+
+#### Exercises
+
+- Explain why a transaction does not help if some validated data lives outside the database.
+- Add a failing test that demonstrates production registration after employee deactivation.
+- Design how employee/product foreign keys would change the production schema after those tables are persisted.
+
+#### Interview Questions
+
+- What should define a transaction boundary?
+- Why are service-level validations still useful if the database also has constraints?
+- When should validation be enforced by code, by database constraints or by both?
+- Why do consumer-owned interfaces reduce coupling?
+
+#### Roadmap Update
+
+- Lesson 4.4 completed.
+- Milestone 4 completed.
+- Current milestone moved to Milestone 5.
+- Known technical debt updated for employee/product persistence and transactional consistency.
+
+### Milestone 4 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve the milestone as a learning-oriented vertical slice: production registration has domain validation, an application service, PostgreSQL persistence, sqlc queries and integration tests.
+
+The main architectural weakness is mixed persistence: employees/products are in-memory while production entries are PostgreSQL-backed. This is acceptable temporarily because Milestone 5 is explicitly about persistence quality, but it must not remain long-term.
+
+#### Code Review
+
+The code remains explicit and small. The handler does not expose sqlc types. The service owns business coordination. The repository translates infrastructure errors into domain errors.
+
+The main improvement for the next milestone is to persist employees/products and replace application-only reference checks with stronger database-backed consistency.
+
+#### Refactoring
+
+No broad refactor is needed before Milestone 5. The next refactor should be persistence-focused: introduce PostgreSQL-backed repositories for employees/products and revisit foreign keys/transactions.
+
+#### Interview Review
+
+You should now be able to discuss why sqlc is different from an ORM, why migrations are production history, how context reaches pgx calls, why package-name stutter matters and what a transaction boundary should represent.
+
+#### Completion Criteria
+
+- Production entries persist in PostgreSQL.
+- PostgreSQL is integrated through pgx and sqlc.
+- Migrations run with goose.
+- Production registration validates employee/product business references.
+- Tests, build, lint and sqlc generation pass.
+- Roadmap updated.
 
 ### Goal
 

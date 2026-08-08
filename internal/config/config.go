@@ -7,16 +7,20 @@ import (
 
 // Config holds the application configuration loaded from environment variables.
 type Config struct {
-	Host string
-	Port int
+	Host          string
+	Port          int
+	DatabaseURL   string
+	MigrationsDir string
 }
 
 // Load reads configuration from environment variables, applying defaults where
 // values are not set.
 func Load() Config {
 	cfg := Config{
-		Host: "0.0.0.0",
-		Port: 9090,
+		Host:          "0.0.0.0",
+		Port:          9090,
+		DatabaseURL:   "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable",
+		MigrationsDir: "migrations",
 	}
 
 	if host := os.Getenv("HOST"); host != "" {
@@ -27,6 +31,14 @@ func Load() Config {
 		if port, err := strconv.Atoi(p); err == nil {
 			cfg.Port = port
 		}
+	}
+
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		cfg.DatabaseURL = databaseURL
+	}
+
+	if migrationsDir := os.Getenv("MIGRATIONS_DIR"); migrationsDir != "" {
+		cfg.MigrationsDir = migrationsDir
 	}
 
 	return cfg
