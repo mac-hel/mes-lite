@@ -29,5 +29,3 @@ Lesson 3.3 is complete and `ROADMAP.md` is updated.
 
 **Code Review**
 No blocking issues found. A stricter `SKU` value object type could be introduced later, but delaying it is the better Go choice for now because `string` still keeps the API simple and the current validation solves the real problem.
-
-Note: the worktree already had other staged/unstaged changes before this lesson; I did not revert or modify unrelated files.

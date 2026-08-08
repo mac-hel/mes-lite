@@ -325,6 +325,22 @@ Typed error: `type ValidationError struct { Field string }`
 
 ---
 
+# Validation
+
+**transport**
+validates only HTTP request correctness, not domain rules
+e.g. using struct tags
+
+**domain**
+- constructor `NewProduct` validates domain rules (invariants)
+- `ReconstituteProduct` validates reconstructing data - should be private if possible
+- both use common `validate` function but can adjust validation for own requirements
+
+**repository**
+uses `ReconstituteProduct` to create product from DB data
+
+---
+
 # Interfaces
 
 Interfaces are satisfied **implicitly**.
@@ -1460,8 +1476,9 @@ Immutable byte data: `pointer to bytes + length`; exact representation is an imp
 len(s)                  // counts **bytes**, not Unicode characters.
 for _, r := range s     // iterates UTF-8 decoded runes (int32 representing Unicode code point)
 ```
-strings.ToLower
 strings.Contains
+strings.ToLower
+strings.TrimSpace
 
 ## Stringer interface
 `fmt.Stringer` interface (`String() string`) - `fmt.Print`, `%s`, `%v` all produce a readable label; useful for logging and JSON serialization.
