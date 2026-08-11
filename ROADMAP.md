@@ -23,9 +23,9 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 1.7
+**Version:** 2.4
 **Status:** IN PROGRESS
-**Current milestone:** 5 - Persistence & Data Access
+**Current milestone:** 6 - Authentication & Authorization
 **Current lesson:** Not started
 **Completed milestones:**
 - Milestone 0
@@ -33,12 +33,13 @@ This section must always reflect the current progress.
 - Milestone 2
 - Milestone 3
 - Milestone 4
-**Next milestone:** 6 - Authentication & Authorization
+- Milestone 5
+**Next milestone:** 7 - Production Orders
 **Current branch:** main
-**Architecture maturity:** 5 / 10
-**Go knowledge progress:** 30%
-**Interview readiness:** 20%
-**Known technical debt:** Employees and products remain in-memory until Milestone 5; production reference validation is not fully transactionally consistent yet.
+**Architecture maturity:** 6 / 10
+**Go knowledge progress:** 40%
+**Interview readiness:** 30%
+**Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later.
 
 The AI must update this section at the end of every lesson and milestone.
 
@@ -124,7 +125,7 @@ The AI should update it after every completed milestone.
 - [x] pgx
 - [x] sqlc
 - [ ] Transactions
-- [ ] Optimistic Locking
+- [x] Optimistic Locking
 - [ ] SQL Optimization
 
 **Testing**
@@ -1749,7 +1750,494 @@ The application begins replacing Excel.
 
 Status
 
-⬜ Not Started
+✅ Completed
+
+### Lessons
+
+- **L5.1** — Persist Employees & Products ✅
+- **L5.2** — Validation Flow & Domain Invariants ✅
+- **L5.3** — Pagination, Filtering & Sorting ✅
+- **L5.4** — Optimistic Locking & Concurrent Updates ✅
+- **L5.5** — Transactional Reference Integrity & Milestone Review ✅
+
+### Lesson 5.5 Completion Notes
+
+#### Business Context
+
+Production entries are business records. They must not reference employees or products that do not exist in durable master data.
+
+#### Problem
+
+Production registration validated employee/product references in application code, but the database still stored plain text references without foreign keys. A bug, import, direct SQL write or future service could insert production entries pointing at missing master data.
+
+#### Design Discussion
+
+PostgreSQL now owns reference existence for new production entries through foreign keys from `production_entries.employee_id` to `employees.id` and from `production_entries.product_sku` to `products.sku`.
+
+The constraints are created as `NOT VALID`. This is a production-safe migration pattern when existing data may be dirty: PostgreSQL enforces the constraint for new writes, but does not scan and reject legacy rows during deployment. A future cleanup migration can validate existing rows and then run `VALIDATE CONSTRAINT`.
+
+Application validation remains valuable because it returns better business errors and checks active/inactive state. Database constraints are the final integrity boundary for reference existence.
+
+#### Go Concepts
+
+- database constraint errors translated into domain errors
+- integration tests that prove failed writes do not leave rows behind
+- distinguishing business validation from persistence integrity
+
+#### Architecture Concepts
+
+- referential integrity belongs in the database
+- application services still own workflow rules
+- database constraints protect against alternate write paths
+- production-safe migration with `NOT VALID` foreign keys
+
+#### Implementation
+
+- Added migration `0004_add_production_reference_foreign_keys.sql`.
+- Added foreign key from `production_entries.employee_id` to `employees.id`.
+- Added foreign key from `production_entries.product_sku` to `products.sku`.
+- Mapped PostgreSQL foreign-key violations to `production.ErrInvalidEntry` at the production persistence boundary.
+- Updated production PostgreSQL integration tests to seed employee/product reference data.
+
+#### Tests
+
+- Added production repository test for missing employee reference.
+- Verified failed foreign-key insert leaves no production row behind.
+- Verified with `make sqlc`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No broad transaction manager was introduced. The current write is a single PostgreSQL statement, so PostgreSQL already executes it atomically. A future multi-step workflow can introduce an explicit transaction abstraction when there is a real multi-write business operation.
+
+#### Code Review
+
+An experienced Go engineer would approve the foreign-key enforcement and the `NOT VALID` migration choice for safe rollout. The main caveat is that legacy rows are not validated yet; this is documented technical debt rather than a hidden inconsistency.
+
+#### Exercises
+
+- Explain why `NOT VALID` foreign keys still protect new writes.
+- Add a cleanup query that finds existing production rows with missing employee references.
+- Explain why active/inactive validation stays in application code instead of a foreign key.
+
+#### Interview Questions
+
+- What is referential integrity?
+- What does a PostgreSQL `NOT VALID` constraint do?
+- Why keep application validation if the database has foreign keys?
+- When should you introduce an explicit transaction boundary?
+
+#### Roadmap Update
+
+- Lesson 5.5 completed.
+- Milestone 5 completed.
+- Current milestone moved to Milestone 6.
+- Known technical debt updated for `NOT VALID` reference constraints and OpenAPI query-parameter documentation.
+
+### Milestone 5 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve the milestone direction. Employees, products and production entries are now PostgreSQL-backed, generated sqlc types remain below slice boundaries, HTTP handlers depend on domain-facing stores and production registration has both application-level reference validation and database-level referential integrity for new writes.
+
+The main architectural limitation is that cross-slice transaction coordination is still implicit. This is acceptable because the current production registration persistence step is a single insert. A future multi-write operation should introduce an explicit transaction boundary rather than a generic transaction abstraction in advance.
+
+#### Code Review
+
+The code is explicit and idiomatic for the current maturity level. Constructors now reject invalid domain entities, repositories validate defensively, update endpoints use optimistic locking and SQL sorting avoids dynamic SQL interpolation.
+
+The main improvement is API documentation: list query parameters are implemented and tested, but OpenAPI query parameter metadata should be reviewed later.
+
+#### Refactoring
+
+Store files were split into `store.go`, `store_in_memory.go` and `store_postgres.go`, improving navigation without changing exported names. Product search now reuses product listing options instead of having a separate persistence method.
+
+#### Interview Review
+
+You should now be able to explain sqlc vs ORM, repository adapters, constructor validation, database constraints, `NOT VALID` foreign keys, limit/offset pagination, safe dynamic sorting and optimistic locking with version columns.
+
+#### Completion Criteria
+
+- Employees and products persist in PostgreSQL.
+- Validation flow is documented and constructors enforce invariants.
+- List endpoints support pagination, filtering and sorting.
+- Optimistic locking prevents stale employee/product updates.
+- Production reference existence is enforced by PostgreSQL foreign keys for new writes.
+- Tests, build, lint and sqlc generation pass.
+- Roadmap updated.
+
+### Lesson 5.4 Completion Notes
+
+#### Business Context
+
+Administrators and team leaders may edit the same employee or product around the same time. Without conflict detection, the last write silently wins and can overwrite another user's changes.
+
+#### Problem
+
+Employee and product updates replaced rows without checking whether the caller edited a stale copy. This creates lost updates under concurrent usage.
+
+#### Design Discussion
+
+The lesson introduces optimistic locking with an integer `version` column. Clients receive the current version when reading or creating an employee/product. Update requests must submit the version they edited. The database update succeeds only when the submitted version matches the stored version, then increments the version atomically.
+
+This keeps the solution simple and explicit. We do not hold long database locks across HTTP requests. Instead, conflicts are detected at write time and returned as `409 Conflict`.
+
+#### Go Concepts
+
+- optimistic concurrency with version fields
+- stale-write detection with sentinel errors
+- update methods returning updated structs
+- concurrent integration tests with goroutines and channels
+
+#### Architecture Concepts
+
+- conflict detection belongs at the persistence boundary
+- HTTP translates stale writes to `409 Conflict`
+- database update predicates enforce atomic compare-and-swap behavior
+- handlers return the incremented version after successful writes
+
+#### Implementation
+
+- Added `Version` to employee and product domain structs.
+- Added `ErrVersionConflict` for employees and products.
+- Added migration `0003_add_employee_product_versions.sql`.
+- Updated sqlc create/get/list/update queries to include `version`.
+- Changed employee/product store `Update` methods to return the updated entity.
+- Updated in-memory stores to reject stale versions and increment versions.
+- Updated PostgreSQL stores to use `WHERE id/sku = $1 AND version = $6` update predicates.
+- Updated employee/product update HTTP requests to require `version`.
+- Mapped stale updates to `409 Conflict`.
+
+#### Tests
+
+- Updated handler tests to submit versions and assert incremented response versions.
+- Added handler tests for stale-version conflicts.
+- Added PostgreSQL stale-version tests for employees and products.
+- Added a PostgreSQL concurrent update test using two goroutines updating the same employee version; one update succeeds and one returns `ErrVersionConflict`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+Store update contracts now return the updated entity so handlers do not guess the next version. This keeps version increments owned by persistence implementations.
+
+#### Code Review
+
+An experienced Go engineer would approve this optimistic-locking design for simple master-data updates. The main trade-off is API friction: clients must now send a version on updates. That is intentional because silent overwrites are worse than explicit conflicts.
+
+#### Exercises
+
+- Explain why the version check must happen in the SQL `WHERE` clause.
+- Add a product concurrent update test mirroring the employee test.
+- Design the client behavior after receiving `409 Conflict`.
+
+#### Interview Questions
+
+- What problem does optimistic locking solve?
+- How is optimistic locking different from pessimistic locking?
+- Why does `UPDATE ... WHERE version = ?` avoid lost updates?
+- When would `SELECT ... FOR UPDATE` be a better choice?
+
+#### Roadmap Update
+
+- Lesson 5.4 completed.
+- Current lesson moved to Lesson 5.5.
+- Known technical debt updated: optimistic locking completed; foreign-key-backed transactional reference integrity remains pending.
+
+### Lesson 5.3 Completion Notes
+
+#### Business Context
+
+As employee and product data grows, returning every row becomes inefficient and hard to use. Team leaders and administrators need predictable list endpoints that can page, filter and sort data.
+
+#### Problem
+
+Employee and product repositories returned all rows. Product search existed as a separate store method, while employees had no filtering. There was no consistent pagination or sort validation.
+
+#### Design Discussion
+
+The lesson uses explicit per-slice `ListOptions` instead of a generic pagination abstraction. This keeps allowed filters and sort keys close to the business capability. Employees and products both support `limit`, `offset`, `sort`, `q` and `active`, but each slice owns its own valid sort fields and query matching rules.
+
+Sorting is whitelisted instead of interpolating SQL identifiers. PostgreSQL queries use static `CASE WHEN` ordering so user input never becomes SQL syntax. In-memory stores implement the same behavior for fast tests.
+
+#### Go Concepts
+
+- request query parsing with `strconv`
+- option structs for explicit repository APIs
+- in-memory filtering with `strings`
+- deterministic sorting with `sort.Slice`
+- defensive validation in handlers and stores
+
+#### Architecture Concepts
+
+- repository API designed around query intent
+- filtering/sorting rules owned by vertical slices
+- SQL injection prevention through whitelisted sort values
+- one list/query path instead of separate product search persistence methods
+
+#### Implementation
+
+- Added employee and product `ListOptions` and `Page` types.
+- Added validated `limit`, `offset`, `sort`, `q` and `active` query parameters.
+- Updated employee and product `Store.List` contracts to accept options.
+- Removed the separate product store-level `Search` method and reused `List` with `Query`.
+- Updated PostgreSQL sqlc list queries with filtering, sorting, `LIMIT` and `OFFSET`.
+- Updated in-memory stores to match PostgreSQL filtering and sorting behavior.
+- Added pagination metadata to list responses.
+
+#### Tests
+
+- Added in-memory store tests for filtering, sorting and pagination.
+- Added HTTP handler tests for list query options and invalid query options.
+- Updated PostgreSQL repository tests to use the new list contract.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+Product search now delegates to the same list mechanism as `GET /products`. This removes a second persistence method and keeps search behavior consistent with pagination and sorting.
+
+#### Code Review
+
+An experienced Go engineer would approve the main design because user-controlled sort input is whitelisted and never interpolated into SQL. The main follow-up is API documentation quality: Fuego generates the endpoints, but explicit query-parameter documentation should be reviewed later.
+
+#### Exercises
+
+- Add a repository test proving `offset` beyond the result size returns an empty non-nil slice.
+- Add a new employee sort key and update both in-memory and PostgreSQL implementations.
+- Explain why dynamic SQL string concatenation would be risky for sort fields.
+
+#### Interview Questions
+
+- Why is offset pagination simple but not always ideal for large datasets?
+- How do you safely implement dynamic sorting in SQL?
+- What is the difference between filtering in Go and filtering in SQL?
+- When would cursor pagination be better than limit/offset pagination?
+
+#### Roadmap Update
+
+- Lesson 5.3 completed.
+- Current lesson moved to Lesson 5.4.
+- Known technical debt updated: pagination/filtering/sorting completed; optimistic locking and foreign-key-backed consistency remain pending.
+
+### Lesson 5.2 Scope
+
+Standardize validation across the whole request-to-database flow and refactor domain constructors so invalid entities are harder to create.
+
+#### Business Context
+
+MES Lite stores operational data that managers and workers rely on. Invalid employee, product or production data should be rejected consistently regardless of whether it enters through HTTP, tests, future imports, background jobs or direct repository calls.
+
+#### Problem
+
+Validation currently exists in multiple places but the flow is not documented. Some constructors create values first and require callers to remember a separate `Validate()` call. This makes invalid domain state possible inside the application.
+
+#### Design Discussion
+
+Validation should be layered instead of duplicated randomly. HTTP handlers validate transport shape. Application services validate workflow rules and references. Domain constructors and mutation methods enforce invariants. Repositories validate before persistence as defense-in-depth. PostgreSQL constraints provide the final integrity boundary.
+
+The lesson begins by documenting the convention in `docs/validation.md`, then refactors constructors and call sites incrementally.
+
+#### Go Concepts
+
+- constructors returning `(T, error)`
+- invalid zero values for business entities
+- validation methods used internally by constructors and mutation methods
+- error wrapping for invariant failures
+
+#### Architecture Concepts
+
+- layered validation responsibility
+- domain invariants vs transport validation
+- database constraints as final integrity boundary
+- consistency rules for future slices and contributors
+
+### Lesson 5.2 Completion Notes
+
+#### Business Context
+
+MES Lite stores production-critical data. Invalid master data or production entries should be rejected consistently regardless of whether data enters through HTTP, tests, repositories, imports or future background jobs.
+
+#### Problem
+
+Domain constructors could create invalid values and relied on callers to remember separate validation calls. Validation responsibilities were also implicit, making future inconsistency likely.
+
+#### Design Discussion
+
+Validation is now documented as a layered flow. Handlers validate transport shape. Application services validate workflows and references. Domain constructors enforce invariants. Repositories validate defensively before persistence. PostgreSQL constraints remain the final integrity boundary.
+
+This does not make invalid state impossible in Go because fields are still exported for API serialization and test readability. It does make the normal construction path safe and documents how future code should behave.
+
+#### Go Concepts
+
+- constructors returning `(T, error)`
+- invalid zero values for business entities
+- mutation methods that preserve invariants by validating a copy before assignment
+- sentinel errors wrapped with domain-specific context
+
+#### Architecture Concepts
+
+- documented validation ownership across layers
+- domain invariants separated from HTTP validation tags
+- repository validation as defense-in-depth
+- database constraints as the final safety net
+
+#### Implementation
+
+- Added `docs/validation.md` as the project validation guideline.
+- Changed `employees.NewEmployee` to return `(Employee, error)` and validate required fields.
+- Added `Employee.Validate` and `Employee.UpdateDetails`.
+- Changed `products.NewProduct` to return `(Product, error)`.
+- Changed `Product.UpdateDetails` to return an error and preserve the previous value on invalid input.
+- Changed `production.NewEntry` to return `(Entry, error)`.
+- Updated handlers, services, stores and tests to handle constructor errors explicitly.
+- Added defensive employee validation in in-memory and PostgreSQL stores.
+
+#### Tests
+
+- Added constructor rejection tests for employees, products and production entries.
+- Added mutation preservation tests for employee and product updates.
+- Updated repository and HTTP fixtures to fail fast on invalid test data.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+The refactor keeps public struct fields for now because existing HTTP serialization and tests rely on them. A future stricter domain model could hide fields behind accessor methods, but that would be a larger API-design change and is not needed yet.
+
+#### Code Review
+
+An experienced Go engineer would approve this as a clear improvement: invalid construction is harder, validation ownership is documented and repositories still provide a storage boundary. The main caveat is that exported fields still allow manual invalid mutation; this is acceptable for the current project maturity but should be revisited if domain invariants become more complex.
+
+#### Exercises
+
+- Explain why `NewProduct` now returns `(Product, error)` instead of `Product`.
+- Add a table test for `Employee.Validate` covering every required field.
+- Try to mutate a product with invalid details and explain why the old value is preserved.
+
+#### Interview Questions
+
+- When is it acceptable for a Go type to have an invalid zero value?
+- Why should HTTP validation not replace domain validation?
+- Why should repositories still validate if constructors already validate?
+- What belongs in database constraints versus application code?
+
+#### Roadmap Update
+
+- Lesson 5.2 completed.
+- Current lesson moved to Lesson 5.3.
+- Known technical debt updated: constructor validation inconsistency resolved; pagination/filtering/sorting, optimistic locking and foreign-key-backed consistency remain pending.
+
+### Lesson 5.1 Scope
+
+Persist employees and products in PostgreSQL so production registration no longer depends on in-memory reference data.
+
+#### Business Context
+
+Employees and products are master data. If they disappear after a restart, production records cannot be trusted as durable business history.
+
+#### Problem
+
+Production entries already persist in PostgreSQL, but employee and product stores are still in-memory. This creates mixed persistence and prevents database-backed reference validation.
+
+#### Design Discussion
+
+This lesson keeps the existing employee/product package APIs and replaces only the infrastructure implementation. The HTTP handlers still depend on the existing `Store` interfaces, while the composition root chooses PostgreSQL stores for the running server.
+
+Foreign keys from production entries to employees/products are intentionally postponed to Lesson 5.5 because they require a migration strategy for existing production data and a discussion about transaction boundaries.
+
+#### Go Concepts
+
+- persistence adapters between domain structs and generated SQL structs
+- wrapped sentinel errors for storage failures
+- context propagation through repository methods
+
+#### Architecture Concepts
+
+- persistence implementation inside each vertical slice
+- composition root selects concrete infrastructure
+- domain-facing APIs remain stable while storage changes
+
+### Lesson 5.1 Completion Notes
+
+#### Business Context
+
+Employees and products are master data required for trustworthy production history.
+
+#### Problem
+
+Production entries were PostgreSQL-backed, but employees and products still lived in memory. Restarting the server lost reference data and kept production registration only partially durable.
+
+#### Design Discussion
+
+The existing handler-facing store interfaces stayed unchanged. Each vertical slice now owns its SQL queries, generated sqlc package and PostgreSQL adapter. This keeps generated database types below the package boundary and avoids leaking infrastructure details into HTTP handlers or production registration logic.
+
+Foreign keys were intentionally postponed to Lesson 5.5. Adding them safely needs a migration and transaction-boundary discussion, especially for existing production rows that may reference master data created before this lesson.
+
+#### Go Concepts
+
+- sqlc-generated code as an implementation detail
+- adapter functions from database rows to domain structs
+- sentinel errors wrapped with storage context
+- package-local integration test setup
+- PostgreSQL advisory locks to serialize concurrent test migrations
+
+#### Architecture Concepts
+
+- persistence adapters inside vertical slices
+- composition root choosing concrete infrastructure
+- stable domain-facing APIs while infrastructure changes
+- explicit remaining consistency gap before foreign keys
+
+#### Implementation
+
+- Added `employees` and `products` PostgreSQL tables in migration `0002`.
+- Added sqlc query files for employee and product create/read/list/update/search operations.
+- Generated `employeesdb` and `productsdb` packages.
+- Added `employees.PostgresStore` and `products.PostgresStore`.
+- Wired `cmd/server` to use PostgreSQL employee and product stores.
+- Preserved in-memory stores for fast handler tests.
+
+#### Tests
+
+- Added employee PostgreSQL store integration tests.
+- Added product PostgreSQL store integration tests.
+- Updated repository test setup to serialize migrations with a PostgreSQL advisory lock.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+The server composition root now uses durable stores for all currently persisted business data. No handler refactor was needed because the existing interfaces already expressed the right package boundary.
+
+#### Code Review
+
+An experienced Go engineer would approve the direction: SQL remains explicit, generated code is isolated, and domain errors are preserved. The main remaining issue is referential integrity: production entries still reference employee/product IDs as text without database foreign keys.
+
+#### Exercises
+
+- Explain why `employeesdb.Employee` should not be returned directly from HTTP handlers.
+- Add a database constraint test that proves blank product names are rejected by PostgreSQL.
+- Trace `POST /employees` from the handler to `pgx.QueryRow`.
+
+#### Interview Questions
+
+- Why keep sqlc-generated types behind repository adapters?
+- What problem do advisory locks solve in integration tests?
+- Why can a database constraint still be useful when Go validation already exists?
+- What are the trade-offs of adding foreign keys in a later migration?
+
+#### Roadmap Update
+
+- Lesson 5.1 completed.
+- Current lesson moved to Lesson 5.2.
+- Known technical debt updated: employees/products are now PostgreSQL-backed; foreign keys and transaction consistency remain pending.
 
 ### Goal
 

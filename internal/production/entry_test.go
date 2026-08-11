@@ -10,7 +10,10 @@ import (
 func TestNewEntry_NormalizesTextFieldsAndTimestamp(t *testing.T) {
 	timestamp := time.Date(2026, 8, 8, 10, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
 
-	entry := NewEntry(" entry-1 ", " emp-1 ", " sku-1 ", 12, " ws-1 ", timestamp, " done ")
+	entry, err := NewEntry(" entry-1 ", " emp-1 ", " sku-1 ", 12, " ws-1 ", timestamp, " done ")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if entry.ID != "entry-1" {
 		t.Errorf("expected trimmed ID, got %q", entry.ID)
@@ -33,7 +36,10 @@ func TestNewEntry_NormalizesTextFieldsAndTimestamp(t *testing.T) {
 }
 
 func TestEntry_Validate(t *testing.T) {
-	valid := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	valid, err := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name  string
@@ -60,6 +66,13 @@ func TestEntry_Validate(t *testing.T) {
 				t.Fatalf("expected ErrInvalidEntry, got %v", err)
 			}
 		})
+	}
+}
+
+func TestNewEntry_RejectsInvalidState(t *testing.T) {
+	_, err := NewEntry("", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected ErrInvalidEntry, got %v", err)
 	}
 }
 

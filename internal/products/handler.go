@@ -3,6 +3,7 @@ package products
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/go-fuego/fuego"
 )
@@ -33,8 +34,8 @@ func (h *Handler) Create(c fuego.ContextWithBody[CreateProductRequest]) (Product
 		return Product{}, err
 	}
 
-	p := NewProduct(body.SKU, body.Name, body.Unit, body.Category)
-	if err := p.Validate(); err != nil {
+	p, err := NewProduct(body.SKU, body.Name, body.Unit, body.Category)
+	if err != nil {
 		return Product{}, invalidProductError(err)
 	}
 
@@ -56,13 +57,22 @@ func (h *Handler) Create(c fuego.ContextWithBody[CreateProductRequest]) (Product
 
 // ListProductsResponse wraps a slice of products for JSON serialization.
 type ListProductsResponse struct {
-	Products []Product `json:"products"`
+	Products   []Product `json:"products"`
+	Pagination Page      `json:"pagination"`
 }
 
 // List handles GET /products and returns all products.
 func (h *Handler) List(c fuego.ContextNoBody) (ListProductsResponse, error) {
-	prods, err := h.store.List(c.Context())
+	opts, err := listOptionsFromQuery(c)
 	if err != nil {
+		return ListProductsResponse{}, invalidListOptionsError(err)
+	}
+
+	prods, err := h.store.List(c.Context(), opts)
+	if err != nil {
+		if errors.Is(err, ErrInvalidListOptions) {
+			return ListProductsResponse{}, invalidListOptionsError(err)
+		}
 		return ListProductsResponse{}, err
 	}
 
@@ -70,7 +80,50 @@ func (h *Handler) List(c fuego.ContextNoBody) (ListProductsResponse, error) {
 		prods = []Product{}
 	}
 
-	return ListProductsResponse{Products: prods}, nil
+	return ListProductsResponse{Products: prods, Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
+}
+
+func listOptionsFromQuery(c fuego.ContextNoBody) (ListOptions, error) {
+	limit, err := parseIntQuery(c.QueryParam("limit"), "limit")
+	if err != nil {
+		return ListOptions{}, err
+	}
+	offset, err := parseIntQuery(c.QueryParam("offset"), "offset")
+	if err != nil {
+		return ListOptions{}, err
+	}
+	active, err := parseBoolQuery(c.QueryParam("active"), "active")
+	if err != nil {
+		return ListOptions{}, err
+	}
+
+	return ListOptions{Limit: limit, Offset: offset, Sort: c.QueryParam("sort"), Query: c.QueryParam("q"), Active: active}.normalize()
+}
+
+func parseIntQuery(raw, name string) (int, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %w", name, ErrInvalidListOptions)
+	}
+	return value, nil
+}
+
+func parseBoolQuery(raw, name string) (*bool, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be true or false: %w", name, ErrInvalidListOptions)
+	}
+	return &value, nil
+}
+
+func invalidListOptionsError(err error) fuego.BadRequestError {
+	return fuego.BadRequestError{Err: err, Detail: err.Error()}
 }
 
 // UpdateProductRequest is the expected JSON body for updating a product.
@@ -79,6 +132,7 @@ type UpdateProductRequest struct {
 	Name     string          `json:"name"     validate:"required"`
 	Unit     string          `json:"unit"     validate:"required"`
 	Category ProductCategory `json:"category" validate:"min=0,max=4"`
+	Version  int             `json:"version"  validate:"min=1"`
 }
 
 // Update handles PUT /products/{sku} and replaces the product's mutable fields.
@@ -101,19 +155,23 @@ func (h *Handler) Update(c fuego.ContextWithBody[UpdateProductRequest]) (Product
 		return Product{}, err
 	}
 
-	p.UpdateDetails(body.Name, body.Unit, body.Category)
-	if err := p.Validate(); err != nil {
+	if err := p.UpdateDetails(body.Name, body.Unit, body.Category); err != nil {
 		return Product{}, invalidProductError(err)
 	}
+	p.Version = body.Version
 
-	if err := h.store.Update(c.Context(), p); err != nil {
+	updated, err := h.store.Update(c.Context(), p)
+	if err != nil {
 		if errors.Is(err, ErrInvalidProduct) {
 			return Product{}, invalidProductError(err)
+		}
+		if errors.Is(err, ErrVersionConflict) {
+			return Product{}, versionConflictError(err)
 		}
 		return Product{}, err
 	}
 
-	return p, nil
+	return updated, nil
 }
 
 func invalidProductError(err error) fuego.BadRequestError {
@@ -121,6 +179,10 @@ func invalidProductError(err error) fuego.BadRequestError {
 		Err:    err,
 		Detail: err.Error(),
 	}
+}
+
+func versionConflictError(err error) fuego.ConflictError {
+	return fuego.ConflictError{Err: err, Detail: err.Error()}
 }
 
 // Deactivate handles PUT /products/{sku}/deactivate and sets IsActive to false.
@@ -140,19 +202,29 @@ func (h *Handler) Deactivate(c fuego.ContextNoBody) (Product, error) {
 
 	p.IsActive = false
 
-	if err := h.store.Update(c.Context(), p); err != nil {
+	updated, err := h.store.Update(c.Context(), p)
+	if err != nil {
+		if errors.Is(err, ErrVersionConflict) {
+			return Product{}, versionConflictError(err)
+		}
 		return Product{}, err
 	}
 
-	return p, nil
+	return updated, nil
 }
 
 // Search handles GET /products/search?q=... and filters products by name or category.
 func (h *Handler) Search(c fuego.ContextNoBody) (ListProductsResponse, error) {
-	q := c.QueryParam("q")
-
-	prods, err := h.store.Search(c.Context(), q)
+	opts, err := listOptionsFromQuery(c)
 	if err != nil {
+		return ListProductsResponse{}, invalidListOptionsError(err)
+	}
+
+	prods, err := h.store.List(c.Context(), opts)
+	if err != nil {
+		if errors.Is(err, ErrInvalidListOptions) {
+			return ListProductsResponse{}, invalidListOptionsError(err)
+		}
 		return ListProductsResponse{}, err
 	}
 
@@ -160,5 +232,5 @@ func (h *Handler) Search(c fuego.ContextNoBody) (ListProductsResponse, error) {
 		prods = []Product{}
 	}
 
-	return ListProductsResponse{Products: prods}, nil
+	return ListProductsResponse{Products: prods, Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
 }

@@ -30,9 +30,9 @@ type Entry struct {
 	Comment     string
 }
 
-// NewEntry creates a production entry and normalizes text fields.
-func NewEntry(id, employeeID, productSKU string, quantity int, workstation string, timestamp time.Time, comment string) Entry {
-	return Entry{
+// NewEntry creates a valid production entry and normalizes text fields.
+func NewEntry(id, employeeID, productSKU string, quantity int, workstation string, timestamp time.Time, comment string) (Entry, error) {
+	entry := Entry{
 		ID:          strings.TrimSpace(id),
 		EmployeeID:  strings.TrimSpace(employeeID),
 		ProductSKU:  strings.TrimSpace(productSKU),
@@ -41,6 +41,11 @@ func NewEntry(id, employeeID, productSKU string, quantity int, workstation strin
 		Timestamp:   timestamp.UTC(),
 		Comment:     strings.TrimSpace(comment),
 	}
+	if err := entry.Validate(); err != nil {
+		return Entry{}, err
+	}
+
+	return entry, nil
 }
 
 // NewEntryID creates a UUID-shaped identifier using only the standard library.

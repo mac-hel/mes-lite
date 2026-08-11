@@ -302,6 +302,15 @@ when necessary.
 
 ---
 
+# Various
+
+- `time.Time`
+- `os.Exit` - does not trigger deferred functions
+- `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
+- blank imports
+
+---
+
 # Errors
 
 Errors are values: `if err != nil { ... }`
@@ -328,16 +337,22 @@ Typed error: `type ValidationError struct { Field string }`
 # Validation
 
 **transport**
-validates only HTTP request correctness, not domain rules
-e.g. using struct tags
+validates only HTTP request shape, not domain rules, e.g. by using struct tags
 
-**domain**
+**application Services**
+validate workflow rules and references
+
+**Domain**
 - constructor `NewProduct` validates domain rules (invariants)
+- mutation method `UpdateDetails` replaces mutable product fields and preserves product invariants
 - `ReconstituteProduct` validates reconstructing data - should be private if possible
 - both use common `validate` function but can adjust validation for own requirements
 
 **repository**
-uses `ReconstituteProduct` to create product from DB data
+validate before persistence as defense-in-depth
+
+**PostgreSQL**
+constraints provide the final integrity boundary
 
 ---
 
@@ -1237,6 +1252,22 @@ b := []int{}       // non-nil,  length 0
 c := make([]int,0) // non-nil,  length 0
 ```
 
+## sorting
+    import "sort"           // package for sorting Slices and user-defined Collections
+	sort.Slice(prods, func(i, j int) bool {
+		a, b := prods[i], prods[j]
+		switch sortKey {
+		case "-sku":
+			return a.SKU > b.SKU
+		case "name":
+			return a.Name < b.Name
+		case "-name":
+			return a.Name > b.Name
+		default:
+			return a.SKU < b.SKU
+		}
+	})
+
 ---
 
 # Maps
@@ -1479,6 +1510,9 @@ for _, r := range s     // iterates UTF-8 decoded runes (int32 representing Unic
 strings.Contains
 strings.ToLower
 strings.TrimSpace
+
+strconv.Atoi(s)/ParseInt(S,10,0)        // str -> int
+strconv.ParseBool(b)                    // str -> bool
 
 ## Stringer interface
 `fmt.Stringer` interface (`String() string`) - `fmt.Print`, `%s`, `%v` all produce a readable label; useful for logging and JSON serialization.
@@ -1797,6 +1831,13 @@ Useful for:
 * validation
 * protocol handling
 * functions with broad input spaces
+
+---
+
+# Database
+
+- `database/sql` as a stable standard-library abstraction for migration tooling
+- using `pgx` through `database/sql` and `goose`
 
 ---
 

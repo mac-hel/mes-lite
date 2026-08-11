@@ -20,10 +20,18 @@ func testRegistrationService(t *testing.T, store Store) *Service {
 	empStore := employees.NewInMemoryStore()
 	prodStore := products.NewInMemoryStore()
 
-	if err := empStore.Save(t.Context(), employees.NewEmployee("emp-1", "Ana", "Worker", "ana@example.com")); err != nil {
+	emp, err := employees.NewEmployee("emp-1", "Ana", "Worker", "ana@example.com")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := prodStore.Save(t.Context(), products.NewProduct("sku-1", "Ventilation Unit", "piece", products.CategoryVentilation)); err != nil {
+	if err := empStore.Save(t.Context(), emp); err != nil {
+		t.Fatal(err)
+	}
+	prod, err := products.NewProduct("sku-1", "Ventilation Unit", "piece", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prodStore.Save(t.Context(), prod); err != nil {
 		t.Fatal(err)
 	}
 

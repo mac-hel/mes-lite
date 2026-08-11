@@ -40,10 +40,10 @@ func run() int {
 		return 1
 	}
 
-	empStore := employees.NewInMemoryStore()
+	empStore := employees.NewPostgresStore(db)
 	empHandler := employees.NewHandler(empStore)
 
-	prodStore := products.NewInMemoryStore()
+	prodStore := products.NewPostgresStore(db)
 	prodHandler := products.NewHandler(prodStore)
 
 	productionStore := production.NewPostgresStore(db)

@@ -66,7 +66,7 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Entry, error) 
 		return Entry{}, err
 	}
 
-	return entryFromDB(entry), nil
+	return entryFromDB(entry)
 }
 
 func mapPostgresError(id string, err error) error {
@@ -75,7 +75,7 @@ func mapPostgresError(id string, err error) error {
 		switch pgErr.Code {
 		case "23505":
 			return fmt.Errorf("production entry %q: %w", id, ErrAlreadyExists)
-		case "23514", "23502", "22P02":
+		case "23514", "23502", "22P02", "23503":
 			return fmt.Errorf("production entry %q: %w", id, ErrInvalidEntry)
 		}
 	}
@@ -83,7 +83,7 @@ func mapPostgresError(id string, err error) error {
 	return err
 }
 
-func entryFromDB(entry productiondb.ProductionEntry) Entry {
+func entryFromDB(entry productiondb.ProductionEntry) (Entry, error) {
 	return NewEntry(
 		uuidString(entry.ID),
 		entry.EmployeeID,

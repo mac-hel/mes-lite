@@ -39,6 +39,14 @@ func testPostgresStore(t *testing.T) *PostgresStore {
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := sqlDB.ExecContext(ctx, "SELECT pg_advisory_lock(5001)"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := sqlDB.ExecContext(context.Background(), "SELECT pg_advisory_unlock(5001)"); err != nil {
+			t.Logf("unlock migration lock: %v", err)
+		}
+	})
 	if err := goose.Up(sqlDB, filepath.Join("..", "..", "migrations")); err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +60,24 @@ func testPostgresStore(t *testing.T) *PostgresStore {
 	if _, err := pool.Exec(ctx, "DELETE FROM production_entries"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, "DELETE FROM employees"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "DELETE FROM products"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO employees (id, first_name, last_name, email, is_active, version)
+		VALUES ('emp-1', 'Ana', 'Worker', 'ana@example.com', true, 1)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO products (sku, name, category, unit, is_active, version)
+		VALUES ('sku-1', 'Ventilation Unit', 0, 'piece', true, 1)
+	`); err != nil {
+		t.Fatal(err)
+	}
 
 	return NewPostgresStore(pool)
 }
@@ -62,7 +88,10 @@ func TestPostgresStore_SaveAndFindByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Date(2026, 8, 8, 10, 30, 0, 0, time.UTC), "batch finished")
+	entry, err := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Date(2026, 8, 8, 10, 30, 0, 0, time.UTC), "batch finished")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.Save(t.Context(), entry); err != nil {
 		t.Fatal(err)
@@ -84,7 +113,10 @@ func TestPostgresStore_SaveDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	entry, err := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.Save(t.Context(), entry); err != nil {
 		t.Fatal(err)
@@ -115,5 +147,26 @@ func TestPostgresStore_FindByID_InvalidID(t *testing.T) {
 	_, err := store.FindByID(t.Context(), "not-a-uuid")
 	if !errors.Is(err, ErrInvalidEntry) {
 		t.Fatalf("expected ErrInvalidEntry, got %v", err)
+	}
+}
+
+func TestPostgresStore_SaveMissingReference(t *testing.T) {
+	store := testPostgresStore(t)
+	id, err := NewEntryID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := NewEntry(id, "missing", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = store.Save(t.Context(), entry)
+	if !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected ErrInvalidEntry, got %v", err)
+	}
+	_, err = store.FindByID(t.Context(), entry.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected failed insert to leave no row, got %v", err)
 	}
 }

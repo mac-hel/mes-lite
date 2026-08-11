@@ -16,10 +16,18 @@ func newTestService(t *testing.T) (*Service, *InMemoryStore, *employees.InMemory
 	empStore := employees.NewInMemoryStore()
 	prodStore := products.NewInMemoryStore()
 
-	if err := empStore.Save(t.Context(), employees.NewEmployee("emp-1", "Ana", "Worker", "ana@example.com")); err != nil {
+	emp, err := employees.NewEmployee("emp-1", "Ana", "Worker", "ana@example.com")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := prodStore.Save(t.Context(), products.NewProduct("sku-1", "Ventilation Unit", "piece", products.CategoryVentilation)); err != nil {
+	if err := empStore.Save(t.Context(), emp); err != nil {
+		t.Fatal(err)
+	}
+	prod, err := products.NewProduct("sku-1", "Ventilation Unit", "piece", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prodStore.Save(t.Context(), prod); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +90,7 @@ func TestService_Register_InactiveEmployee(t *testing.T) {
 		t.Fatal(err)
 	}
 	emp.IsActive = false
-	if err := empStore.Update(t.Context(), emp); err != nil {
+	if _, err := empStore.Update(t.Context(), emp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +118,7 @@ func TestService_Register_InactiveProduct(t *testing.T) {
 		t.Fatal(err)
 	}
 	prod.IsActive = false
-	if err := prodStore.Update(t.Context(), prod); err != nil {
+	if _, err := prodStore.Update(t.Context(), prod); err != nil {
 		t.Fatal(err)
 	}
 

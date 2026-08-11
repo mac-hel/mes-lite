@@ -64,7 +64,7 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, err
 		return Entry{}, err
 	}
 
-	entry := NewEntry(
+	entry, err := NewEntry(
 		id,
 		cmd.EmployeeID,
 		cmd.ProductSKU,
@@ -73,7 +73,7 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, err
 		cmd.Timestamp,
 		cmd.Comment,
 	)
-	if err := entry.Validate(); err != nil {
+	if err != nil {
 		return Entry{}, err
 	}
 

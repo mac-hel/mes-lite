@@ -195,7 +195,7 @@ func TestHandler_Update(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	s.Mux.ServeHTTP(httptest.NewRecorder(), req)
 
-	updateBody := `{"name":"Updated Name","unit":"set","category":1}`
+	updateBody := `{"name":"Updated Name","unit":"set","category":1,"version":1}`
 	req = httptest.NewRequest(http.MethodPut, "/products/VX-100", strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -221,6 +221,37 @@ func TestHandler_Update(t *testing.T) {
 	}
 	if p.Category != CategoryFilter {
 		t.Errorf("expected Category Filter (1), got %d", p.Category)
+	}
+	if p.Version != 2 {
+		t.Errorf("expected Version 2, got %d", p.Version)
+	}
+}
+
+func TestHandler_Update_VersionConflict(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(store)
+
+	s := fuego.NewServer()
+	fuego.Post(s, "/products", handler.Create)
+	fuego.Put(s, "/products/{sku}", handler.Update)
+
+	createBody := `{"sku":"VX-100","name":"Old Name","unit":"piece","category":0}`
+	req := httptest.NewRequest(http.MethodPost, "/products", strings.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	s.Mux.ServeHTTP(httptest.NewRecorder(), req)
+
+	updateBody := `{"name":"Updated Name","unit":"set","category":1,"version":1}`
+	req = httptest.NewRequest(http.MethodPut, "/products/VX-100", strings.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	s.Mux.ServeHTTP(httptest.NewRecorder(), req)
+
+	req = httptest.NewRequest(http.MethodPut, "/products/VX-100", strings.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

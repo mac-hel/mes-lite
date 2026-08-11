@@ -8,7 +8,10 @@ import (
 )
 
 func TestNewProduct(t *testing.T) {
-	p := products.NewProduct(" VX-100 ", " Ventilation Unit X100 ", " piece ", products.CategoryVentilation)
+	p, err := products.NewProduct(" VX-100 ", " Ventilation Unit X100 ", " piece ", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if p.SKU != "VX-100" {
 		t.Errorf("SKU = %q, want %q", p.SKU, "VX-100")
@@ -25,12 +28,20 @@ func TestNewProduct(t *testing.T) {
 	if !p.IsActive {
 		t.Error("IsActive should default to true")
 	}
+	if p.Version != 1 {
+		t.Errorf("Version = %d, want 1", p.Version)
+	}
 }
 
 func TestProduct_UpdateDetails(t *testing.T) {
-	p := products.NewProduct("VX-100", "Old Name", "piece", products.CategoryVentilation)
+	p, err := products.NewProduct("VX-100", "Old Name", "piece", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	p.UpdateDetails(" Updated Name ", " set ", products.CategoryFilter)
+	if err := p.UpdateDetails(" Updated Name ", " set ", products.CategoryFilter); err != nil {
+		t.Fatal(err)
+	}
 
 	if p.Name != "Updated Name" {
 		t.Errorf("Name = %q, want %q", p.Name, "Updated Name")
@@ -40,6 +51,20 @@ func TestProduct_UpdateDetails(t *testing.T) {
 	}
 	if p.Category != products.CategoryFilter {
 		t.Errorf("Category = %v, want %v", p.Category, products.CategoryFilter)
+	}
+}
+
+func TestProduct_UpdateDetailsPreservesValidState(t *testing.T) {
+	p, err := products.NewProduct("VX-100", "Old Name", "piece", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := p.UpdateDetails(" ", "set", products.CategoryFilter); !errors.Is(err, products.ErrInvalidProduct) {
+		t.Fatalf("expected ErrInvalidProduct, got %v", err)
+	}
+	if p.Name != "Old Name" {
+		t.Errorf("expected failed update to preserve Name, got %q", p.Name)
 	}
 }
 
@@ -96,16 +121,22 @@ func TestProductCategory_Valid(t *testing.T) {
 }
 
 func TestProduct_Validate(t *testing.T) {
+	valid, err := products.NewProduct("VX-100", "Ventilation Unit", "piece", products.CategoryVentilation)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name    string
 		product products.Product
 		wantErr bool
 	}{
-		{"valid", products.NewProduct("VX-100", "Ventilation Unit", "piece", products.CategoryVentilation), false},
-		{"blank sku", products.NewProduct(" ", "Ventilation Unit", "piece", products.CategoryVentilation), true},
-		{"blank name", products.NewProduct("VX-100", " ", "piece", products.CategoryVentilation), true},
-		{"blank unit", products.NewProduct("VX-100", "Ventilation Unit", " ", products.CategoryVentilation), true},
-		{"invalid category", products.NewProduct("VX-100", "Ventilation Unit", "piece", products.ProductCategory(99)), true},
+		{"valid", valid, false},
+		{"blank sku", products.Product{Name: "Ventilation Unit", Unit: "piece", Category: products.CategoryVentilation, IsActive: true, Version: 1}, true},
+		{"blank name", products.Product{SKU: "VX-100", Unit: "piece", Category: products.CategoryVentilation, IsActive: true, Version: 1}, true},
+		{"blank unit", products.Product{SKU: "VX-100", Name: "Ventilation Unit", Category: products.CategoryVentilation, IsActive: true, Version: 1}, true},
+		{"invalid category", products.Product{SKU: "VX-100", Name: "Ventilation Unit", Unit: "piece", Category: products.ProductCategory(99), IsActive: true, Version: 1}, true},
+		{"invalid version", products.Product{SKU: "VX-100", Name: "Ventilation Unit", Unit: "piece", Category: products.CategoryVentilation, IsActive: true}, true},
 	}
 
 	for _, tt := range tests {
@@ -122,6 +153,13 @@ func TestProduct_Validate(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want nil", err)
 			}
 		})
+	}
+}
+
+func TestNewProduct_RejectsInvalidState(t *testing.T) {
+	_, err := products.NewProduct("", "Ventilation Unit", "piece", products.CategoryVentilation)
+	if !errors.Is(err, products.ErrInvalidProduct) {
+		t.Fatalf("expected ErrInvalidProduct, got %v", err)
 	}
 }
 
@@ -175,5 +213,9 @@ func TestSentinelErrors(t *testing.T) {
 	}
 	if products.ErrInvalidProduct.Error() != "invalid product" {
 		t.Errorf("ErrInvalidProduct = %q, want %q", products.ErrInvalidProduct.Error(), "invalid product")
+	}
+
+	if products.ErrVersionConflict == nil {
+		t.Error("ErrVersionConflict should not be nil")
 	}
 }

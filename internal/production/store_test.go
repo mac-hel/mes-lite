@@ -9,7 +9,10 @@ import (
 
 func TestInMemoryStore_SaveAndFindByID(t *testing.T) {
 	store := NewInMemoryStore()
-	entry := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	entry, err := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.Save(context.Background(), entry); err != nil {
 		t.Fatal(err)
@@ -27,13 +30,16 @@ func TestInMemoryStore_SaveAndFindByID(t *testing.T) {
 
 func TestInMemoryStore_SaveDuplicate(t *testing.T) {
 	store := NewInMemoryStore()
-	entry := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	entry, err := NewEntry("entry-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := store.Save(context.Background(), entry); err != nil {
 		t.Fatal(err)
 	}
 
-	err := store.Save(context.Background(), entry)
+	err = store.Save(context.Background(), entry)
 	if !errors.Is(err, ErrAlreadyExists) {
 		t.Fatalf("expected ErrAlreadyExists, got %v", err)
 	}
