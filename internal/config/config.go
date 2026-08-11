@@ -7,10 +7,12 @@ import (
 
 // Config holds the application configuration loaded from environment variables.
 type Config struct {
-	Host          string
-	Port          int
-	DatabaseURL   string
-	MigrationsDir string
+	Host                  string
+	Port                  int
+	DatabaseURL           string
+	MigrationsDir         string
+	AuthBootstrapEmail    string
+	AuthBootstrapPassword string
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -39,6 +41,14 @@ func Load() Config {
 
 	if migrationsDir := os.Getenv("MIGRATIONS_DIR"); migrationsDir != "" {
 		cfg.MigrationsDir = migrationsDir
+	}
+
+	if email := os.Getenv("AUTH_BOOTSTRAP_EMAIL"); email != "" {
+		cfg.AuthBootstrapEmail = email
+	}
+
+	if password := os.Getenv("AUTH_BOOTSTRAP_PASSWORD"); password != "" {
+		cfg.AuthBootstrapPassword = password
 	}
 
 	return cfg

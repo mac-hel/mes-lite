@@ -7,14 +7,24 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
-func testHandlers(t *testing.T) (*employees.Handler, *products.Handler, *production.Handler) {
+func testHandlers(t *testing.T) (*auth.Handler, *employees.Handler, *products.Handler, *production.Handler) {
 	t.Helper()
+
+	authStore := auth.NewInMemoryStore()
+	user, err := auth.NewUser("user-1", "admin@example.com", "secret", auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := authStore.Save(t.Context(), user); err != nil {
+		t.Fatal(err)
+	}
 
 	empStore := employees.NewInMemoryStore()
 	prodStore := products.NewInMemoryStore()
@@ -37,12 +47,12 @@ func testHandlers(t *testing.T) (*employees.Handler, *products.Handler, *product
 
 	productionService := production.NewService(productionStore, empStore, prodStore)
 
-	return employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
+	return auth.NewHandler(auth.NewService(authStore)), employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, empH, prodH, productionH)
+	authH, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -65,8 +75,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, empH, prodH, productionH)
+	authH, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -89,8 +99,8 @@ func TestVersionEndpoint(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, empH, prodH, productionH)
+	authH, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -104,8 +114,8 @@ func TestNotFound(t *testing.T) {
 }
 
 func TestProductionEntriesRoute(t *testing.T) {
-	empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, empH, prodH, productionH)
+	authH, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, empH, prodH, productionH)
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

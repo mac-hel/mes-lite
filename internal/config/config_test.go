@@ -11,6 +11,8 @@ func TestLoadDefaults(t *testing.T) {
 	_ = os.Unsetenv("PORT")
 	_ = os.Unsetenv("DATABASE_URL")
 	_ = os.Unsetenv("MIGRATIONS_DIR")
+	_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
+	_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
 
 	cfg := Load()
 
@@ -29,6 +31,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MigrationsDir != "migrations" {
 		t.Errorf("expected default migrations dir migrations, got %s", cfg.MigrationsDir)
 	}
+
+	if cfg.AuthBootstrapEmail != "" {
+		t.Errorf("expected empty auth bootstrap email, got %s", cfg.AuthBootstrapEmail)
+	}
+
+	if cfg.AuthBootstrapPassword != "" {
+		t.Error("expected empty auth bootstrap password")
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -36,11 +46,15 @@ func TestLoadFromEnv(t *testing.T) {
 	_ = os.Setenv("PORT", "9090")
 	_ = os.Setenv("DATABASE_URL", "postgres://example")
 	_ = os.Setenv("MIGRATIONS_DIR", "db/migrations")
+	_ = os.Setenv("AUTH_BOOTSTRAP_EMAIL", "admin@example.com")
+	_ = os.Setenv("AUTH_BOOTSTRAP_PASSWORD", "secret")
 	defer func() {
 		_ = os.Unsetenv("HOST")
 		_ = os.Unsetenv("PORT")
 		_ = os.Unsetenv("DATABASE_URL")
 		_ = os.Unsetenv("MIGRATIONS_DIR")
+		_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
+		_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
 	}()
 
 	cfg := Load()
@@ -59,6 +73,14 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if cfg.MigrationsDir != "db/migrations" {
 		t.Errorf("expected migrations dir from env, got %s", cfg.MigrationsDir)
+	}
+
+	if cfg.AuthBootstrapEmail != "admin@example.com" {
+		t.Errorf("expected auth bootstrap email from env, got %s", cfg.AuthBootstrapEmail)
+	}
+
+	if cfg.AuthBootstrapPassword != "secret" {
+		t.Error("expected auth bootstrap password from env")
 	}
 }
 

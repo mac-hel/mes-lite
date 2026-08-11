@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-fuego/fuego"
 
+	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/production"
@@ -26,7 +27,7 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler) *Server {
+func New(cfg config.Config, authHandler *auth.Handler, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 	)
@@ -34,6 +35,7 @@ func New(cfg config.Config, empHandler *employees.Handler, prodHandler *products
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
 	fuego.Get(s, "/version", versionHandler)
+	fuego.Post(s, "/auth/login", authHandler.Login)
 
 	fuego.Post(s, "/employees", empHandler.Create)
 	fuego.Get(s, "/employees", empHandler.List)
