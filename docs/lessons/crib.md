@@ -1533,10 +1533,33 @@ const (
 	CategoryVentilation ProductCategory = iota      // constant generator (1st=0, each subseqquent auto-icrements)
 	CategoryFilter
 )
-categoryVar := 1
-switch ProductCategory(categoryVar) {
-    case CategoryVentilation:
 
+func (pc) Valid() bool {
+	switch pc
+	case CategoryVentilation, CategoryFilter:
+		return true
+	default:
+		return false
+	}
+}
+
+pc := 1
+switch ProductCategory(pc) {
+    case CategoryVentilation:
+```
+
+---
+
+# Authentication / Authorization
+
+Password hashing
+```go
+import "golang.org/x/crypto/bcrypt"
+passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+if err != nil {
+    return User{}, fmt.Errorf("hash password: %w", err)
+}
+var correct bool = bcrypt.CompareHashAndPassword(passwordHash, []byte(password)) == nil
 ```
 
 ---
