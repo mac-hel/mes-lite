@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/mac-hel/mes-lite/internal/postgres"
 	"github.com/mac-hel/mes-lite/internal/production/productiondb"
 )
 
@@ -72,10 +73,10 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Entry, error) 
 func mapPostgresError(id string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case "23505":
+		switch postgres.SQLState(pgErr.Code) {
+		case postgres.UniqueViolation:
 			return fmt.Errorf("production entry %q: %w", id, ErrAlreadyExists)
-		case "23514", "23502", "22P02", "23503":
+		case postgres.CheckViolation, postgres.NotNullViolation, postgres.InvalidTextValue, postgres.ForeignKeyViolation:
 			return fmt.Errorf("production entry %q: %w", id, ErrInvalidEntry)
 		}
 	}

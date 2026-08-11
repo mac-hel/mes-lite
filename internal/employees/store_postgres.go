@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mac-hel/mes-lite/internal/employees/employeesdb"
+	"github.com/mac-hel/mes-lite/internal/postgres"
 )
 
 // NewPostgresStore creates a PostgreSQL-backed [Store].
@@ -120,10 +121,10 @@ func (s *PostgresStore) updateNoRowsError(ctx context.Context, id string, versio
 func mapPostgresError(id string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case "23505":
+		switch postgres.SQLState(pgErr.Code) {
+		case postgres.UniqueViolation:
 			return fmt.Errorf("employee %q: %w", id, ErrAlreadyExists)
-		case "23514", "23502":
+		case postgres.CheckViolation, postgres.NotNullViolation:
 			return fmt.Errorf("employee %q: %w", id, ErrInvalidEmployee)
 		}
 	}
