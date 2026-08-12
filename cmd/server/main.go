@@ -67,6 +67,7 @@ func run() int {
 		}
 	}
 	authHandler := auth.NewHandler(auth.NewService(authStore, tokens))
+	authMiddleware := auth.NewMiddleware(tokens)
 
 	empStore := employees.NewPostgresStore(db)
 	empHandler := employees.NewHandler(empStore)
@@ -78,7 +79,7 @@ func run() int {
 	productionService := production.NewService(productionStore, empStore, prodStore)
 	productionHandler := production.NewHandler(productionService)
 
-	srv := server.New(cfg, authHandler, empHandler, prodHandler, productionHandler)
+	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler)
 
 	if err := srv.Start(ctx); err != nil {
 		slog.Error("server shutdown with error", "err", err)

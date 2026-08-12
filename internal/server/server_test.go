@@ -14,7 +14,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
-func testHandlers(t *testing.T) (*auth.Handler, *employees.Handler, *products.Handler, *production.Handler) {
+func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenManager, *employees.Handler, *products.Handler, *production.Handler) {
 	t.Helper()
 
 	authStore := auth.NewInMemoryStore()
@@ -51,12 +51,12 @@ func testHandlers(t *testing.T) (*auth.Handler, *employees.Handler, *products.Ha
 
 	productionService := production.NewService(productionStore, empStore, prodStore)
 
-	return auth.NewHandler(auth.NewService(authStore, tokens)), employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
+	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	authH, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -79,8 +79,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	authH, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -103,8 +103,8 @@ func TestVersionEndpoint(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	authH, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -118,10 +118,39 @@ func TestNotFound(t *testing.T) {
 }
 
 func TestProductionEntriesRoute(t *testing.T) {
-	authH, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, empH, prodH, productionH)
+	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntriesRouteRequiresAuthentication(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLoginRouteRemainsPublic(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	body := []byte(`{"email":"admin@example.com","password":"secret"}`)
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -129,4 +158,17 @@ func TestProductionEntriesRoute(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
+}
+
+func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager) {
+	t.Helper()
+	user, err := auth.NewUser("user-1", "admin@example.com", "secret", auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := tokens.Issue(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 }

@@ -27,28 +27,29 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, authHandler *auth.Handler, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler) *Server {
+func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 	)
+	requireAuth := fuego.OptionMiddleware(authMiddleware.Authenticate)
 
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
 	fuego.Get(s, "/version", versionHandler)
 	fuego.Post(s, "/auth/login", authHandler.Login)
 
-	fuego.Post(s, "/employees", empHandler.Create)
-	fuego.Get(s, "/employees", empHandler.List)
-	fuego.Put(s, "/employees/{id}", empHandler.Update)
-	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate)
+	fuego.Post(s, "/employees", empHandler.Create, requireAuth)
+	fuego.Get(s, "/employees", empHandler.List, requireAuth)
+	fuego.Put(s, "/employees/{id}", empHandler.Update, requireAuth)
+	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate, requireAuth)
 
-	fuego.Post(s, "/products", prodHandler.Create)
-	fuego.Get(s, "/products", prodHandler.List)
-	fuego.Get(s, "/products/search", prodHandler.Search)
-	fuego.Put(s, "/products/{sku}", prodHandler.Update)
-	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate)
+	fuego.Post(s, "/products", prodHandler.Create, requireAuth)
+	fuego.Get(s, "/products", prodHandler.List, requireAuth)
+	fuego.Get(s, "/products/search", prodHandler.Search, requireAuth)
+	fuego.Put(s, "/products/{sku}", prodHandler.Update, requireAuth)
+	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, requireAuth)
 
-	fuego.Post(s, "/production-entries", productionHandler.Register)
+	fuego.Post(s, "/production-entries", productionHandler.Register, requireAuth)
 
 	return &Server{Server: s, cfg: cfg}
 }

@@ -1510,6 +1510,8 @@ for _, r := range s     // iterates UTF-8 decoded runes (int32 representing Unic
 strings.Contains
 strings.ToLower
 strings.TrimSpace
+strings.HasPrefix(s, prefix)
+strings.TrimPrefix(s, prefix)
 
 strconv.Atoi(s)/ParseInt(S,10,0)        // str -> int
 strconv.ParseBool(b)                    // str -> bool
