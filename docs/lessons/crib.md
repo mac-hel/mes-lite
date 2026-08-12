@@ -308,6 +308,7 @@ when necessary.
 - `os.Exit` - does not trigger deferred functions
 - `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
 - blank imports
+- variadic function parameters: `func (nums ...int)`
 
 ---
 
@@ -1276,8 +1277,9 @@ Runtime-managed structures with reference-like behavior.
 Lookup: O(1)
 
 ```go
-m := make(map[string]User)  // initialize (memory) - map must be initialized before writing
-m["x"] = 1                  // write entry
+m := make(map[string]User)                  // initialize (memory) - map must be initialized before writing
+m := make(map[User]struct{}, len(users))    // Map Set pattern
+m["x"] = 1                                  // write entry
 
 m2 := m                     // copies reference; NOT independent copy: mutation of one's entries is visible through the other
 ```
@@ -1565,6 +1567,8 @@ if err != nil {
 }
 var correct bool = bcrypt.CompareHashAndPassword(passwordHash, []byte(password)) == nil
 ```
+
+RBAC (Role-Based Access Control) - group permissions into Roles, assign Roles to Users; instead of by-person permissions
 
 ---
 

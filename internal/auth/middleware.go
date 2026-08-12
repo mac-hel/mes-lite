@@ -39,6 +39,29 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	})
 }
 
+// RequireRole allows only authenticated principals with one of the given roles.
+func (m *Middleware) RequireRole(roles ...Role) func(http.Handler) http.Handler {
+	allowed := make(map[Role]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[role] = struct{}{}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			principal, ok := PrincipalFromContext(r.Context())
+			if !ok {
+				writeUnauthorized(w)
+				return
+			}
+			if _, ok := allowed[principal.Role]; !ok {
+				writeForbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // ContextWithPrincipal returns a child context containing the authenticated principal.
 func ContextWithPrincipal(ctx context.Context, principal Principal) context.Context {
 	return context.WithValue(ctx, principalContextKey{}, principal)
@@ -65,5 +88,14 @@ func writeUnauthorized(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error":  "unauthorized",
 		"detail": "missing or invalid access token",
+	})
+}
+
+func writeForbidden(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":  "forbidden",
+		"detail": "insufficient permissions",
 	})
 }

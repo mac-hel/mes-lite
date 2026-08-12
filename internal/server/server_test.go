@@ -123,7 +123,7 @@ func TestProductionEntriesRoute(t *testing.T) {
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	setAuthorization(t, req, tokens)
+	setAuthorization(t, req, tokens, auth.RoleAdmin)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
 
@@ -160,9 +160,52 @@ func TestLoginRouteRemainsPublic(t *testing.T) {
 	}
 }
 
-func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager) {
+func TestEmployeeCreateRequiresAdminRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	body := []byte(`{"id":"emp-2","firstName":"Bob","lastName":"Worker","email":"bob@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/employees", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductListAllowsLeaderRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	req := httptest.NewRequest(http.MethodGet, "/products", nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager, role auth.Role) {
 	t.Helper()
-	user, err := auth.NewUser("user-1", "admin@example.com", "secret", auth.RoleAdmin)
+	user, err := auth.NewUser("user-1", "user@example.com", "secret", role)
 	if err != nil {
 		t.Fatal(err)
 	}

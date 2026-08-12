@@ -31,25 +31,28 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 	)
-	requireAuth := fuego.OptionMiddleware(authMiddleware.Authenticate)
+	adminOnly := fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin))
+	readMasterData := fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader))
+	manageProducts := fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager))
+	registerProduction := fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader, auth.RoleWorker))
 
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
 	fuego.Get(s, "/version", versionHandler)
 	fuego.Post(s, "/auth/login", authHandler.Login)
 
-	fuego.Post(s, "/employees", empHandler.Create, requireAuth)
-	fuego.Get(s, "/employees", empHandler.List, requireAuth)
-	fuego.Put(s, "/employees/{id}", empHandler.Update, requireAuth)
-	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate, requireAuth)
+	fuego.Post(s, "/employees", empHandler.Create, adminOnly)
+	fuego.Get(s, "/employees", empHandler.List, readMasterData)
+	fuego.Put(s, "/employees/{id}", empHandler.Update, adminOnly)
+	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate, adminOnly)
 
-	fuego.Post(s, "/products", prodHandler.Create, requireAuth)
-	fuego.Get(s, "/products", prodHandler.List, requireAuth)
-	fuego.Get(s, "/products/search", prodHandler.Search, requireAuth)
-	fuego.Put(s, "/products/{sku}", prodHandler.Update, requireAuth)
-	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, requireAuth)
+	fuego.Post(s, "/products", prodHandler.Create, manageProducts)
+	fuego.Get(s, "/products", prodHandler.List, readMasterData)
+	fuego.Get(s, "/products/search", prodHandler.Search, readMasterData)
+	fuego.Put(s, "/products/{sku}", prodHandler.Update, manageProducts)
+	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, manageProducts)
 
-	fuego.Post(s, "/production-entries", productionHandler.Register, requireAuth)
+	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
 
 	return &Server{Server: s, cfg: cfg}
 }
