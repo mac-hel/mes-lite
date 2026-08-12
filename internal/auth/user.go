@@ -25,6 +25,9 @@ const (
 // ErrInvalidUser means a user violates an auth domain invariant.
 var ErrInvalidUser = errors.New("invalid user")
 
+// ErrAlreadyExists means an auth user already exists.
+var ErrAlreadyExists = errors.New("user already exists")
+
 // User is an authenticated person who can access MES Lite.
 type User struct {
 	ID           string `json:"id"`

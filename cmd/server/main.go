@@ -50,7 +50,7 @@ func run() int {
 		return 1
 	}
 
-	authStore := auth.NewInMemoryStore()
+	authStore := auth.NewPostgresStore(db)
 	if cfg.AuthBootstrapEmail != "" || cfg.AuthBootstrapPassword != "" {
 		if cfg.AuthBootstrapEmail == "" || cfg.AuthBootstrapPassword == "" {
 			slog.Error("AUTH_BOOTSTRAP_EMAIL and AUTH_BOOTSTRAP_PASSWORD must be set together")
@@ -61,7 +61,7 @@ func run() int {
 			slog.Error("create bootstrap auth user", "err", err)
 			return 1
 		}
-		if err := authStore.Save(ctx, user); err != nil {
+		if err := authStore.EnsureBootstrapAdmin(ctx, user); err != nil {
 			slog.Error("save bootstrap auth user", "err", err)
 			return 1
 		}
