@@ -2,10 +2,7 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -18,15 +15,16 @@ var (
 
 // Service coordinates authentication use cases.
 type Service struct {
-	store Store
+	store  Store
+	tokens *TokenManager
 }
 
 // NewService creates an authentication service.
-func NewService(store Store) *Service {
-	return &Service{store: store}
+func NewService(store Store, tokens *TokenManager) *Service {
+	return &Service{store: store, tokens: tokens}
 }
 
-// Login verifies credentials and returns an opaque access token for the caller.
+// Login verifies credentials and returns a signed JWT access token for the caller.
 func (s *Service) Login(ctx context.Context, email, password string) (LoginResult, error) {
 	if strings.TrimSpace(email) == "" || strings.TrimSpace(password) == "" {
 		return LoginResult{}, ErrInvalidCredentials
@@ -47,20 +45,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (LoginResul
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	token, err := newAccessToken()
+	token, err := s.tokens.Issue(user)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	return LoginResult{AccessToken: token, User: user}, nil
-}
-
-func newAccessToken() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate access token: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 // LoginResult is returned after successful credential verification.

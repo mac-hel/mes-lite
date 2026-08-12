@@ -40,6 +40,15 @@ func run() int {
 		slog.Error("ping database", "err", err)
 		return 1
 	}
+	if cfg.JWTSecret == "" {
+		slog.Error("JWT_SECRET is required")
+		return 1
+	}
+	tokens, err := auth.NewTokenManager(cfg.JWTSecret)
+	if err != nil {
+		slog.Error("create token manager", "err", err)
+		return 1
+	}
 
 	authStore := auth.NewInMemoryStore()
 	if cfg.AuthBootstrapEmail != "" || cfg.AuthBootstrapPassword != "" {
@@ -57,7 +66,7 @@ func run() int {
 			return 1
 		}
 	}
-	authHandler := auth.NewHandler(auth.NewService(authStore))
+	authHandler := auth.NewHandler(auth.NewService(authStore, tokens))
 
 	empStore := employees.NewPostgresStore(db)
 	empHandler := employees.NewHandler(empStore)

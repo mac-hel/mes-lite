@@ -103,3 +103,9 @@ An experienced Go engineer would approve the separation between auth users and e
 - Why should passwords be hashed with bcrypt/argon2 instead of SHA-256?
 - Why should APIs return `401 Unauthorized` for invalid login credentials?
 - Why is a default admin password dangerous?
+
+#### Roadmap Update
+
+- Lesson 6.1 completed.
+- Current lesson moved to Lesson 6.2.
+- Known technical debt updated for temporary auth token and user persistence gaps.

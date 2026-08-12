@@ -304,7 +304,7 @@ when necessary.
 
 # Various
 
-- `time.Time`
+- `import time`: var now time.Time = time.Now().UTC(), var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
 - `os.Exit` - does not trigger deferred functions
 - `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
 - blank imports
@@ -1513,6 +1513,8 @@ strings.TrimSpace
 
 strconv.Atoi(s)/ParseInt(S,10,0)        // str -> int
 strconv.ParseBool(b)                    // str -> bool
+
+strings.Count(str, substr)              // count non-overlapping substr in str
 
 ## Stringer interface
 `fmt.Stringer` interface (`String() string`) - `fmt.Print`, `%s`, `%v` all produce a readable label; useful for logging and JSON serialization.

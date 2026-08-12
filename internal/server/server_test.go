@@ -25,6 +25,10 @@ func testHandlers(t *testing.T) (*auth.Handler, *employees.Handler, *products.Ha
 	if err := authStore.Save(t.Context(), user); err != nil {
 		t.Fatal(err)
 	}
+	tokens, err := auth.NewTokenManager("test-secret-with-at-least-32-characters")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	empStore := employees.NewInMemoryStore()
 	prodStore := products.NewInMemoryStore()
@@ -47,7 +51,7 @@ func testHandlers(t *testing.T) (*auth.Handler, *employees.Handler, *products.Ha
 
 	productionService := production.NewService(productionStore, empStore, prodStore)
 
-	return auth.NewHandler(auth.NewService(authStore)), employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
+	return auth.NewHandler(auth.NewService(authStore, tokens)), employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
 }
 
 func TestHealthEndpoint(t *testing.T) {

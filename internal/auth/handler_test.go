@@ -19,9 +19,10 @@ func TestLoginHandler(t *testing.T) {
 	if err := store.Save(t.Context(), user); err != nil {
 		t.Fatal(err)
 	}
+	tokens := testTokenManager(t)
 
 	s := fuego.NewServer()
-	fuego.Post(s, "/auth/login", NewHandler(NewService(store)).Login)
+	fuego.Post(s, "/auth/login", NewHandler(NewService(store, tokens)).Login)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader([]byte(`{"email":"admin@example.com","password":"secret"}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -44,7 +45,7 @@ func TestLoginHandler(t *testing.T) {
 func TestLoginHandlerRejectsInvalidCredentials(t *testing.T) {
 	store := NewInMemoryStore()
 	s := fuego.NewServer()
-	fuego.Post(s, "/auth/login", NewHandler(NewService(store)).Login)
+	fuego.Post(s, "/auth/login", NewHandler(NewService(store, testTokenManager(t))).Login)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader([]byte(`{"email":"admin@example.com","password":"wrong"}`)))
 	req.Header.Set("Content-Type", "application/json")

@@ -13,6 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	_ = os.Unsetenv("MIGRATIONS_DIR")
 	_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
 	_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
+	_ = os.Unsetenv("JWT_SECRET")
 
 	cfg := Load()
 
@@ -39,6 +40,10 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.AuthBootstrapPassword != "" {
 		t.Error("expected empty auth bootstrap password")
 	}
+
+	if cfg.JWTSecret != "" {
+		t.Error("expected empty jwt secret")
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -48,6 +53,7 @@ func TestLoadFromEnv(t *testing.T) {
 	_ = os.Setenv("MIGRATIONS_DIR", "db/migrations")
 	_ = os.Setenv("AUTH_BOOTSTRAP_EMAIL", "admin@example.com")
 	_ = os.Setenv("AUTH_BOOTSTRAP_PASSWORD", "secret")
+	_ = os.Setenv("JWT_SECRET", "jwt-secret-with-at-least-32-characters")
 	defer func() {
 		_ = os.Unsetenv("HOST")
 		_ = os.Unsetenv("PORT")
@@ -55,6 +61,7 @@ func TestLoadFromEnv(t *testing.T) {
 		_ = os.Unsetenv("MIGRATIONS_DIR")
 		_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
 		_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
+		_ = os.Unsetenv("JWT_SECRET")
 	}()
 
 	cfg := Load()
@@ -81,6 +88,10 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if cfg.AuthBootstrapPassword != "secret" {
 		t.Error("expected auth bootstrap password from env")
+	}
+
+	if cfg.JWTSecret != "jwt-secret-with-at-least-32-characters" {
+		t.Error("expected jwt secret from env")
 	}
 }
 

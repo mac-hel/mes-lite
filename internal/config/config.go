@@ -13,6 +13,7 @@ type Config struct {
 	MigrationsDir         string
 	AuthBootstrapEmail    string
 	AuthBootstrapPassword string
+	JWTSecret             string
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -49,6 +50,10 @@ func Load() Config {
 
 	if password := os.Getenv("AUTH_BOOTSTRAP_PASSWORD"); password != "" {
 		cfg.AuthBootstrapPassword = password
+	}
+
+	if secret := os.Getenv("JWT_SECRET"); secret != "" {
+		cfg.JWTSecret = secret
 	}
 
 	return cfg
