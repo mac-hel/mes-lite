@@ -304,7 +304,10 @@ when necessary.
 
 # Various
 
-- `import time`: var now time.Time = time.Now().UTC(), var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
+- `import time`:
+        - var now time.Time = time.Now().UTC()
+        - var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
+        - ttl.IsZero()
 - `os.Exit` - does not trigger deferred functions
 - `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
 - blank imports
