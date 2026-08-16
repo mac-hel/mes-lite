@@ -38,15 +38,15 @@ func (s Status) Valid() bool {
 
 // OrderLine describes one planned product inside a production order.
 type OrderLine struct {
-	ProductSKU      string
-	PlannedQuantity int
+	productSKU      string
+	plannedQuantity int
 }
 
 // NewOrderLine creates a valid order line and normalizes text fields.
 func NewOrderLine(productSKU string, plannedQuantity int) (OrderLine, error) {
 	line := OrderLine{
-		ProductSKU:      strings.TrimSpace(productSKU),
-		PlannedQuantity: plannedQuantity,
+		productSKU:      strings.TrimSpace(productSKU),
+		plannedQuantity: plannedQuantity,
 	}
 	if err := line.Validate(); err != nil {
 		return OrderLine{}, err
@@ -55,15 +55,25 @@ func NewOrderLine(productSKU string, plannedQuantity int) (OrderLine, error) {
 	return line, nil
 }
 
+// ProductSKU returns the planned product SKU for this line.
+func (l OrderLine) ProductSKU() string {
+	return l.productSKU
+}
+
+// PlannedQuantity returns the planned quantity for this line.
+func (l OrderLine) PlannedQuantity() int {
+	return l.plannedQuantity
+}
+
 // Validate checks the order line invariants.
 func (l OrderLine) Validate() error {
-	if strings.TrimSpace(l.ProductSKU) == "" {
+	if strings.TrimSpace(l.productSKU) == "" {
 		return fmt.Errorf("product sku is required: %w", ErrInvalidOrder)
 	}
-	if l.PlannedQuantity <= 0 {
+	if l.plannedQuantity <= 0 {
 		return fmt.Errorf("planned quantity must be greater than zero: %w", ErrInvalidOrder)
 	}
-	if l.PlannedQuantity > math.MaxInt32 {
+	if l.plannedQuantity > math.MaxInt32 {
 		return fmt.Errorf("planned quantity must fit PostgreSQL integer: %w", ErrInvalidOrder)
 	}
 
@@ -72,23 +82,23 @@ func (l OrderLine) Validate() error {
 
 // Order is the aggregate root for planned production work.
 type Order struct {
-	ID                string
-	Lines             []OrderLine
-	Status            Status
-	AssignedEmployees []string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	id                string
+	lines             []OrderLine
+	status            Status
+	assignedEmployees []string
+	createdAt         time.Time
+	updatedAt         time.Time
 }
 
 // NewOrder creates a draft production order and normalizes text and timestamps.
 func NewOrder(id string, lines []OrderLine, now time.Time) (Order, error) {
 	createdAt := now.UTC()
 	order := Order{
-		ID:        strings.TrimSpace(id),
-		Lines:     copyOrderLines(lines),
-		Status:    StatusDraft,
-		CreatedAt: createdAt,
-		UpdatedAt: createdAt,
+		id:        strings.TrimSpace(id),
+		lines:     copyOrderLines(lines),
+		status:    StatusDraft,
+		createdAt: createdAt,
+		updatedAt: createdAt,
 	}
 	if err := order.Validate(); err != nil {
 		return Order{}, err
@@ -97,35 +107,65 @@ func NewOrder(id string, lines []OrderLine, now time.Time) (Order, error) {
 	return order, nil
 }
 
+// ID returns the order identifier.
+func (o Order) ID() string {
+	return o.id
+}
+
+// Lines returns a copy of the order lines.
+func (o Order) Lines() []OrderLine {
+	return copyOrderLines(o.lines)
+}
+
+// Status returns the current order status.
+func (o Order) Status() Status {
+	return o.status
+}
+
+// AssignedEmployees returns a copy of assigned employee identifiers.
+func (o Order) AssignedEmployees() []string {
+	return copyAssignedEmployees(o.assignedEmployees)
+}
+
+// CreatedAt returns the timestamp when the order was created.
+func (o Order) CreatedAt() time.Time {
+	return o.createdAt
+}
+
+// UpdatedAt returns the timestamp when the order was last changed.
+func (o Order) UpdatedAt() time.Time {
+	return o.updatedAt
+}
+
 // Validate checks the order invariants that must hold in every entry point.
 func (o Order) Validate() error {
-	if strings.TrimSpace(o.ID) == "" {
+	if strings.TrimSpace(o.id) == "" {
 		return fmt.Errorf("id is required: %w", ErrInvalidOrder)
 	}
-	if len(o.Lines) == 0 {
+	if len(o.lines) == 0 {
 		return fmt.Errorf("at least one order line is required: %w", ErrInvalidOrder)
 	}
-	if !o.Status.Valid() {
-		return fmt.Errorf("status %q is not supported: %w", o.Status, ErrInvalidOrder)
+	if !o.status.Valid() {
+		return fmt.Errorf("status %q is not supported: %w", o.status, ErrInvalidOrder)
 	}
-	if o.CreatedAt.IsZero() {
+	if o.createdAt.IsZero() {
 		return fmt.Errorf("created at is required: %w", ErrInvalidOrder)
 	}
-	if o.UpdatedAt.IsZero() {
+	if o.updatedAt.IsZero() {
 		return fmt.Errorf("updated at is required: %w", ErrInvalidOrder)
 	}
-	seenProductSKUs := make(map[string]struct{}, len(o.Lines))
-	for _, line := range o.Lines {
+	seenProductSKUs := make(map[string]struct{}, len(o.lines))
+	for _, line := range o.lines {
 		if err := line.Validate(); err != nil {
 			return err
 		}
-		productSKU := strings.TrimSpace(line.ProductSKU)
+		productSKU := strings.TrimSpace(line.productSKU)
 		if _, ok := seenProductSKUs[productSKU]; ok {
 			return fmt.Errorf("duplicate product sku %q: %w", productSKU, ErrInvalidOrder)
 		}
 		seenProductSKUs[productSKU] = struct{}{}
 	}
-	for _, employeeID := range o.AssignedEmployees {
+	for _, employeeID := range o.assignedEmployees {
 		if strings.TrimSpace(employeeID) == "" {
 			return fmt.Errorf("assigned employee id is required: %w", ErrInvalidOrder)
 		}
@@ -140,16 +180,16 @@ func (o *Order) AssignEmployee(employeeID string, now time.Time) error {
 	if employeeID == "" {
 		return fmt.Errorf("employee id is required: %w", ErrInvalidOrder)
 	}
-	if o.Status == StatusCompleted || o.Status == StatusCancelled {
-		return fmt.Errorf("cannot assign employee to %s order: %w", o.Status, ErrInvalidTransition)
+	if o.status == StatusCompleted || o.status == StatusCancelled {
+		return fmt.Errorf("cannot assign employee to %s order: %w", o.status, ErrInvalidTransition)
 	}
 	if o.hasAssignedEmployee(employeeID) {
 		return nil
 	}
 
 	updated := *o
-	updated.AssignedEmployees = append(copyAssignedEmployees(o.AssignedEmployees), employeeID)
-	updated.UpdatedAt = now.UTC()
+	updated.assignedEmployees = append(copyAssignedEmployees(o.assignedEmployees), employeeID)
+	updated.updatedAt = now.UTC()
 	if err := updated.Validate(); err != nil {
 		return err
 	}
@@ -160,10 +200,10 @@ func (o *Order) AssignEmployee(employeeID string, now time.Time) error {
 
 // Release moves a draft order into released status.
 func (o *Order) Release(now time.Time) error {
-	if o.Status != StatusDraft {
-		return fmt.Errorf("cannot release %s order: %w", o.Status, ErrInvalidTransition)
+	if o.status != StatusDraft {
+		return fmt.Errorf("cannot release %s order: %w", o.status, ErrInvalidTransition)
 	}
-	if len(o.AssignedEmployees) == 0 {
+	if len(o.assignedEmployees) == 0 {
 		return fmt.Errorf("released order requires at least one assigned employee: %w", ErrInvalidOrder)
 	}
 
@@ -172,8 +212,8 @@ func (o *Order) Release(now time.Time) error {
 
 // Start moves a released order into in-progress status.
 func (o *Order) Start(now time.Time) error {
-	if o.Status != StatusReleased {
-		return fmt.Errorf("cannot start %s order: %w", o.Status, ErrInvalidTransition)
+	if o.status != StatusReleased {
+		return fmt.Errorf("cannot start %s order: %w", o.status, ErrInvalidTransition)
 	}
 
 	return o.changeStatus(StatusInProgress, now)
@@ -181,8 +221,8 @@ func (o *Order) Start(now time.Time) error {
 
 // Complete moves an in-progress order into completed status.
 func (o *Order) Complete(now time.Time) error {
-	if o.Status != StatusInProgress {
-		return fmt.Errorf("cannot complete %s order: %w", o.Status, ErrInvalidTransition)
+	if o.status != StatusInProgress {
+		return fmt.Errorf("cannot complete %s order: %w", o.status, ErrInvalidTransition)
 	}
 
 	return o.changeStatus(StatusCompleted, now)
@@ -190,10 +230,10 @@ func (o *Order) Complete(now time.Time) error {
 
 // Cancel moves a non-completed order into cancelled status.
 func (o *Order) Cancel(now time.Time) error {
-	if o.Status == StatusCompleted {
+	if o.status == StatusCompleted {
 		return fmt.Errorf("cannot cancel completed order: %w", ErrInvalidTransition)
 	}
-	if o.Status == StatusCancelled {
+	if o.status == StatusCancelled {
 		return nil
 	}
 
@@ -202,8 +242,8 @@ func (o *Order) Cancel(now time.Time) error {
 
 func (o *Order) changeStatus(status Status, now time.Time) error {
 	updated := *o
-	updated.Status = status
-	updated.UpdatedAt = now.UTC()
+	updated.status = status
+	updated.updatedAt = now.UTC()
 	if err := updated.Validate(); err != nil {
 		return err
 	}
@@ -213,7 +253,7 @@ func (o *Order) changeStatus(status Status, now time.Time) error {
 }
 
 func (o Order) hasAssignedEmployee(employeeID string) bool {
-	for _, assigned := range o.AssignedEmployees {
+	for _, assigned := range o.assignedEmployees {
 		if assigned == employeeID {
 			return true
 		}
