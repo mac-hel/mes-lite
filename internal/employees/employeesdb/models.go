@@ -50,3 +50,21 @@ type ProductionEntry struct {
 	Comment     string             `json:"comment"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
+
+type ProductionOrder struct {
+	ID        string             `json:"id"`
+	Status    string             `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductionOrderAssignment struct {
+	OrderID    string `json:"order_id"`
+	EmployeeID string `json:"employee_id"`
+}
+
+type ProductionOrderLine struct {
+	OrderID         string `json:"order_id"`
+	ProductSku      string `json:"product_sku"`
+	PlannedQuantity int32  `json:"planned_quantity"`
+}

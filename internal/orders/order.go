@@ -14,6 +14,12 @@ var ErrInvalidOrder = errors.New("invalid production order")
 // ErrInvalidTransition is returned when an order status change is not allowed.
 var ErrInvalidTransition = errors.New("invalid production order status transition")
 
+// ErrNotFound is returned when a production order cannot be found by ID.
+var ErrNotFound = errors.New("production order not found")
+
+// ErrAlreadyExists is returned when trying to create a duplicate production order.
+var ErrAlreadyExists = errors.New("production order already exists")
+
 // Status describes the production order lifecycle.
 type Status string
 
@@ -107,6 +113,23 @@ func NewOrder(id string, lines []OrderLine, now time.Time) (Order, error) {
 	return order, nil
 }
 
+// RestoreOrder rebuilds a persisted order while preserving aggregate validation.
+func RestoreOrder(id string, lines []OrderLine, status Status, assignedEmployees []string, createdAt, updatedAt time.Time) (Order, error) {
+	order := Order{
+		id:                strings.TrimSpace(id),
+		lines:             copyOrderLines(lines),
+		status:            status,
+		assignedEmployees: copyAssignedEmployees(assignedEmployees),
+		createdAt:         createdAt.UTC(),
+		updatedAt:         updatedAt.UTC(),
+	}
+	if err := order.Validate(); err != nil {
+		return Order{}, err
+	}
+
+	return order, nil
+}
+
 // ID returns the order identifier.
 func (o Order) ID() string {
 	return o.id
@@ -169,6 +192,14 @@ func (o Order) Validate() error {
 		if strings.TrimSpace(employeeID) == "" {
 			return fmt.Errorf("assigned employee id is required: %w", ErrInvalidOrder)
 		}
+	}
+	seenEmployeeIDs := make(map[string]struct{}, len(o.assignedEmployees))
+	for _, employeeID := range o.assignedEmployees {
+		employeeID = strings.TrimSpace(employeeID)
+		if _, ok := seenEmployeeIDs[employeeID]; ok {
+			return fmt.Errorf("duplicate assigned employee id %q: %w", employeeID, ErrInvalidOrder)
+		}
+		seenEmployeeIDs[employeeID] = struct{}{}
 	}
 
 	return nil
