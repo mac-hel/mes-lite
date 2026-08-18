@@ -10,7 +10,7 @@ import (
 func TestNewOrder_NormalizesTextAndTimestamps(t *testing.T) {
 	now := time.Date(2026, 8, 12, 10, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
 
-	order, err := NewOrder(" order-1 ", []OrderLine{mustOrderLine(t, " VX-100 ", 100), mustOrderLine(t, " FILTER-1 ", 4)}, now)
+	order, err := NewOrder(" order-1 ", mustOrderLines(t, mustOrderLine(t, " VX-100 ", 100), mustOrderLine(t, " FILTER-1 ", 4)), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +18,7 @@ func TestNewOrder_NormalizesTextAndTimestamps(t *testing.T) {
 	if order.ID() != "order-1" {
 		t.Errorf("ID = %q, want %q", order.ID(), "order-1")
 	}
-	lines := order.Lines()
+	lines := order.Lines().Values()
 	if len(lines) != 2 {
 		t.Fatalf("line count = %d, want 2", len(lines))
 	}
@@ -39,27 +39,38 @@ func TestNewOrder_NormalizesTextAndTimestamps(t *testing.T) {
 	}
 }
 
-func TestNewOrder_CopiesLines(t *testing.T) {
+func TestNewOrderLines_CopiesLines(t *testing.T) {
 	lines := []OrderLine{mustOrderLine(t, "VX-100", 100)}
-	order, err := NewOrder("order-1", lines, time.Now())
+	orderLines, err := NewOrderLines(lines...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	lines[0].productSKU = "FILTER-1"
 
-	if order.Lines()[0].ProductSKU() != "VX-100" {
-		t.Errorf("order line was mutated through caller-owned slice, got %q", order.Lines()[0].ProductSKU())
+	if orderLines.Values()[0].ProductSKU() != "VX-100" {
+		t.Errorf("order line was mutated through caller-owned slice, got %q", orderLines.Values()[0].ProductSKU())
 	}
 }
 
-func TestOrder_LinesReturnsCopy(t *testing.T) {
-	order := mustOrder(t)
-	lines := order.Lines()
+func TestOrderLines_ValuesReturnsCopy(t *testing.T) {
+	orderLines := mustOrderLines(t, mustOrderLine(t, "VX-100", 100))
+	lines := orderLines.Values()
 	lines[0].productSKU = "FILTER-1"
 
-	if order.Lines()[0].ProductSKU() != "VX-100" {
-		t.Errorf("order line was mutated through returned slice, got %q", order.Lines()[0].ProductSKU())
+	if orderLines.Values()[0].ProductSKU() != "VX-100" {
+		t.Errorf("order line was mutated through returned slice, got %q", orderLines.Values()[0].ProductSKU())
+	}
+}
+
+func TestNewOrderLines(t *testing.T) {
+	orderLines, err := NewOrderLines(mustOrderLine(t, "VX-100", 100), mustOrderLine(t, "FILTER-1", 4))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if orderLines.Len() != 2 {
+		t.Fatalf("Len() = %d, want 2", orderLines.Len())
 	}
 }
 
@@ -116,6 +127,31 @@ func TestOrderLine_Validate(t *testing.T) {
 	}
 }
 
+func TestOrderLines_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		orderLines OrderLines
+	}{
+		{"valid", mustOrderLines(t, mustOrderLine(t, "VX-100", 100))},
+		{"missing lines", OrderLines{}},
+		{"invalid line", OrderLines{values: []OrderLine{{productSKU: "VX-100"}}}},
+		{"duplicate product sku", OrderLines{values: []OrderLine{mustOrderLine(t, "VX-100", 100), mustOrderLine(t, "VX-100", 50)}}},
+		{"duplicate product sku with spaces", OrderLines{values: []OrderLine{mustOrderLine(t, "VX-100", 100), {productSKU: " VX-100 ", plannedQuantity: 50}}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.orderLines.Validate()
+			if tt.name == "valid" && err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+			if tt.name != "valid" && !errors.Is(err, ErrInvalidOrder) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidOrder", err)
+			}
+		})
+	}
+}
+
 func TestNewOrderLine_RejectsInvalidState(t *testing.T) {
 	_, err := NewOrderLine("", 100)
 	if !errors.Is(err, ErrInvalidOrder) {
@@ -125,7 +161,7 @@ func TestNewOrderLine_RejectsInvalidState(t *testing.T) {
 
 func TestOrder_Validate(t *testing.T) {
 	now := time.Now()
-	valid, err := NewOrder("order-1", []OrderLine{mustOrderLine(t, "VX-100", 100), mustOrderLine(t, "FILTER-1", 4)}, now)
+	valid, err := NewOrder("order-1", mustOrderLines(t, mustOrderLine(t, "VX-100", 100), mustOrderLine(t, "FILTER-1", 4)), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,15 +171,13 @@ func TestOrder_Validate(t *testing.T) {
 		order Order
 	}{
 		{"valid", valid},
-		{"missing id", Order{lines: []OrderLine{mustOrderLine(t, "VX-100", 100)}, status: StatusDraft, createdAt: now, updatedAt: now}},
+		{"missing id", Order{lines: mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), status: StatusDraft, createdAt: now, updatedAt: now}},
 		{"missing lines", Order{id: "order-1", status: StatusDraft, createdAt: now, updatedAt: now}},
-		{"invalid line", Order{id: "order-1", lines: []OrderLine{{productSKU: "VX-100"}}, status: StatusDraft, createdAt: now, updatedAt: now}},
-		{"duplicate product sku", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100), mustOrderLine(t, "VX-100", 50)}, status: StatusDraft, createdAt: now, updatedAt: now}},
-		{"duplicate product sku with spaces", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100), {productSKU: " VX-100 ", plannedQuantity: 50}}, status: StatusDraft, createdAt: now, updatedAt: now}},
-		{"invalid status", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100)}, status: Status("unknown"), createdAt: now, updatedAt: now}},
-		{"missing created at", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100)}, status: StatusDraft, updatedAt: now}},
-		{"missing updated at", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100)}, status: StatusDraft, createdAt: now}},
-		{"blank assigned employee", Order{id: "order-1", lines: []OrderLine{mustOrderLine(t, "VX-100", 100)}, status: StatusDraft, createdAt: now, updatedAt: now, assignedEmployees: []string{"emp-1", " "}}},
+		{"invalid line", Order{id: "order-1", lines: OrderLines{values: []OrderLine{{productSKU: "VX-100"}}}, status: StatusDraft, createdAt: now, updatedAt: now}},
+		{"invalid status", Order{id: "order-1", lines: mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), status: Status("unknown"), createdAt: now, updatedAt: now}},
+		{"missing created at", Order{id: "order-1", lines: mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), status: StatusDraft, updatedAt: now}},
+		{"missing updated at", Order{id: "order-1", lines: mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), status: StatusDraft, createdAt: now}},
+		{"blank assigned employee", Order{id: "order-1", lines: mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), status: StatusDraft, createdAt: now, updatedAt: now, assignedEmployees: []string{"emp-1", " "}}},
 	}
 
 	for _, tt := range tests {
@@ -160,7 +194,7 @@ func TestOrder_Validate(t *testing.T) {
 }
 
 func TestNewOrder_RejectsInvalidState(t *testing.T) {
-	_, err := NewOrder("", []OrderLine{mustOrderLine(t, "VX-100", 100)}, time.Now())
+	_, err := NewOrder("", mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), time.Now())
 	if !errors.Is(err, ErrInvalidOrder) {
 		t.Fatalf("NewOrder() error = %v, want ErrInvalidOrder", err)
 	}
@@ -368,7 +402,7 @@ func TestSentinelErrors(t *testing.T) {
 func mustOrder(t *testing.T) Order {
 	t.Helper()
 
-	order, err := NewOrder("order-1", []OrderLine{mustOrderLine(t, "VX-100", 100)}, time.Now())
+	order, err := NewOrder("order-1", mustOrderLines(t, mustOrderLine(t, "VX-100", 100)), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,4 +417,14 @@ func mustOrderLine(t *testing.T, productSKU string, plannedQuantity int) OrderLi
 		t.Fatal(err)
 	}
 	return line
+}
+
+func mustOrderLines(t *testing.T, lines ...OrderLine) OrderLines {
+	t.Helper()
+
+	orderLines, err := NewOrderLines(lines...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return orderLines
 }

@@ -86,10 +86,55 @@ func (l OrderLine) Validate() error {
 	return nil
 }
 
+// OrderLines is the validated collection of planned products inside an order.
+type OrderLines struct {
+	values []OrderLine
+}
+
+// NewOrderLines creates a valid collection of order lines.
+func NewOrderLines(lines ...OrderLine) (OrderLines, error) {
+	collection := OrderLines{values: copyOrderLineValues(lines)}
+	if err := collection.Validate(); err != nil {
+		return OrderLines{}, err
+	}
+
+	return collection, nil
+}
+
+// Values returns a copy of the order lines.
+func (l OrderLines) Values() []OrderLine {
+	return copyOrderLineValues(l.values)
+}
+
+// Len returns the number of order lines in the collection.
+func (l OrderLines) Len() int {
+	return len(l.values)
+}
+
+// Validate checks the collection invariants for order lines.
+func (l OrderLines) Validate() error {
+	if len(l.values) == 0 {
+		return fmt.Errorf("at least one order line is required: %w", ErrInvalidOrder)
+	}
+	seenProductSKUs := make(map[string]struct{}, len(l.values))
+	for _, line := range l.values {
+		if err := line.Validate(); err != nil {
+			return err
+		}
+		productSKU := strings.TrimSpace(line.productSKU)
+		if _, ok := seenProductSKUs[productSKU]; ok {
+			return fmt.Errorf("duplicate product sku %q: %w", productSKU, ErrInvalidOrder)
+		}
+		seenProductSKUs[productSKU] = struct{}{}
+	}
+
+	return nil
+}
+
 // Order is the aggregate root for planned production work.
 type Order struct {
 	id                string
-	lines             []OrderLine
+	lines             OrderLines
 	status            Status
 	assignedEmployees []string
 	createdAt         time.Time
@@ -97,11 +142,11 @@ type Order struct {
 }
 
 // NewOrder creates a draft production order and normalizes text and timestamps.
-func NewOrder(id string, lines []OrderLine, now time.Time) (Order, error) {
+func NewOrder(id string, lines OrderLines, now time.Time) (Order, error) {
 	createdAt := now.UTC()
 	order := Order{
 		id:        strings.TrimSpace(id),
-		lines:     copyOrderLines(lines),
+		lines:     lines,
 		status:    StatusDraft,
 		createdAt: createdAt,
 		updatedAt: createdAt,
@@ -114,10 +159,10 @@ func NewOrder(id string, lines []OrderLine, now time.Time) (Order, error) {
 }
 
 // RestoreOrder rebuilds a persisted order while preserving aggregate validation.
-func RestoreOrder(id string, lines []OrderLine, status Status, assignedEmployees []string, createdAt, updatedAt time.Time) (Order, error) {
+func RestoreOrder(id string, lines OrderLines, status Status, assignedEmployees []string, createdAt, updatedAt time.Time) (Order, error) {
 	order := Order{
 		id:                strings.TrimSpace(id),
-		lines:             copyOrderLines(lines),
+		lines:             lines,
 		status:            status,
 		assignedEmployees: copyAssignedEmployees(assignedEmployees),
 		createdAt:         createdAt.UTC(),
@@ -135,9 +180,9 @@ func (o Order) ID() string {
 	return o.id
 }
 
-// Lines returns a copy of the order lines.
-func (o Order) Lines() []OrderLine {
-	return copyOrderLines(o.lines)
+// Lines returns the validated order-line collection.
+func (o Order) Lines() OrderLines {
+	return o.lines
 }
 
 // Status returns the current order status.
@@ -165,9 +210,6 @@ func (o Order) Validate() error {
 	if strings.TrimSpace(o.id) == "" {
 		return fmt.Errorf("id is required: %w", ErrInvalidOrder)
 	}
-	if len(o.lines) == 0 {
-		return fmt.Errorf("at least one order line is required: %w", ErrInvalidOrder)
-	}
 	if !o.status.Valid() {
 		return fmt.Errorf("status %q is not supported: %w", o.status, ErrInvalidOrder)
 	}
@@ -177,16 +219,8 @@ func (o Order) Validate() error {
 	if o.updatedAt.IsZero() {
 		return fmt.Errorf("updated at is required: %w", ErrInvalidOrder)
 	}
-	seenProductSKUs := make(map[string]struct{}, len(o.lines))
-	for _, line := range o.lines {
-		if err := line.Validate(); err != nil {
-			return err
-		}
-		productSKU := strings.TrimSpace(line.productSKU)
-		if _, ok := seenProductSKUs[productSKU]; ok {
-			return fmt.Errorf("duplicate product sku %q: %w", productSKU, ErrInvalidOrder)
-		}
-		seenProductSKUs[productSKU] = struct{}{}
+	if err := o.lines.Validate(); err != nil {
+		return err
 	}
 	for _, employeeID := range o.assignedEmployees {
 		if strings.TrimSpace(employeeID) == "" {
@@ -303,7 +337,7 @@ func copyAssignedEmployees(employeeIDs []string) []string {
 	return copied
 }
 
-func copyOrderLines(lines []OrderLine) []OrderLine {
+func copyOrderLineValues(lines []OrderLine) []OrderLine {
 	if len(lines) == 0 {
 		return nil
 	}

@@ -182,17 +182,19 @@ func assertOrdersEqual(t *testing.T, want, got Order) {
 	assertStringsEqual(t, want.AssignedEmployees(), got.AssignedEmployees())
 }
 
-func assertOrderLinesEqual(t *testing.T, want, got []OrderLine) {
+func assertOrderLinesEqual(t *testing.T, want, got OrderLines) {
 	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("line count = %d, want %d", len(got), len(want))
+	wantValues := want.Values()
+	gotValues := got.Values()
+	if len(gotValues) != len(wantValues) {
+		t.Fatalf("line count = %d, want %d", len(gotValues), len(wantValues))
 	}
-	for i := range want {
-		if got[i].ProductSKU() != want[i].ProductSKU() {
-			t.Fatalf("line[%d].ProductSKU = %q, want %q", i, got[i].ProductSKU(), want[i].ProductSKU())
+	for i := range wantValues {
+		if gotValues[i].ProductSKU() != wantValues[i].ProductSKU() {
+			t.Fatalf("line[%d].ProductSKU = %q, want %q", i, gotValues[i].ProductSKU(), wantValues[i].ProductSKU())
 		}
-		if got[i].PlannedQuantity() != want[i].PlannedQuantity() {
-			t.Fatalf("line[%d].PlannedQuantity = %d, want %d", i, got[i].PlannedQuantity(), want[i].PlannedQuantity())
+		if gotValues[i].PlannedQuantity() != wantValues[i].PlannedQuantity() {
+			t.Fatalf("line[%d].PlannedQuantity = %d, want %d", i, gotValues[i].PlannedQuantity(), wantValues[i].PlannedQuantity())
 		}
 	}
 }
@@ -211,7 +213,11 @@ func assertStringsEqual(t *testing.T, want, got []string) {
 
 func mustOrderWithLines(t *testing.T, lines ...OrderLine) Order {
 	t.Helper()
-	order, err := NewOrder("order-1", lines, time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC))
+	orderLines, err := NewOrderLines(lines...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := NewOrder("order-1", orderLines, time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}

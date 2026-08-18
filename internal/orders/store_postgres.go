@@ -49,7 +49,7 @@ func (s *PostgresStore) Save(ctx context.Context, order Order) error {
 		return mapPostgresError(order.ID(), err)
 	}
 
-	for _, line := range order.Lines() {
+	for _, line := range order.Lines().Values() {
 		if line.PlannedQuantity() > math.MaxInt32 {
 			return fmt.Errorf("production order %q: %w", order.ID(), ErrInvalidOrder)
 		}
@@ -110,7 +110,12 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Order, error) 
 		assignedEmployees = append(assignedEmployees, assignmentRow.EmployeeID)
 	}
 
-	return RestoreOrder(row.ID, lines, Status(row.Status), assignedEmployees, row.CreatedAt.Time, row.UpdatedAt.Time)
+	orderLines, err := NewOrderLines(lines...)
+	if err != nil {
+		return Order{}, err
+	}
+
+	return RestoreOrder(row.ID, orderLines, Status(row.Status), assignedEmployees, row.CreatedAt.Time, row.UpdatedAt.Time)
 }
 
 func timestamptz(t time.Time) pgtype.Timestamptz {

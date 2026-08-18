@@ -8,5 +8,7 @@ Distinct entity stored in DB
 Currently all domain Entities have public fields. Would it be feasible to make fields private at current phase of project?
 - <DONE> Order
 
-## Fields as Collections
-What do you think about using collection as fields that contain multiple values, e.g. `Order.lines` (`[]OrderLine`) or `Order.assignedEmployees` (`[]string`)?
+## <PARTIALY> Fields as Collections
+What do you think about using collections as types of fields that contain multiple values, e.g. fields like:
+- <DONE> `Order.lines` (currently `[]OrderLine`, could be collection)
+- <REJECTED FOR NOW> `Order.assignedEmployees` (currently `[]string`, could be collection)
