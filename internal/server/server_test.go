@@ -10,11 +10,12 @@ import (
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
-func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenManager, *employees.Handler, *products.Handler, *production.Handler) {
+func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenManager, *employees.Handler, *products.Handler, *production.Handler, *orders.Handler) {
 	t.Helper()
 
 	authStore := auth.NewInMemoryStore()
@@ -50,13 +51,14 @@ func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenMan
 	}
 
 	productionService := production.NewService(productionStore, empStore, prodStore)
+	ordersStore := orders.NewInMemoryStore()
 
-	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService)
+	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService), orders.NewHandler(ordersStore)
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	authH, authM, _, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -79,8 +81,8 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	authH, authM, _, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -103,8 +105,8 @@ func TestVersionEndpoint(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	authH, authM, _, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
@@ -118,8 +120,8 @@ func TestNotFound(t *testing.T) {
 }
 
 func TestProductionEntriesRoute(t *testing.T) {
-	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -133,8 +135,8 @@ func TestProductionEntriesRoute(t *testing.T) {
 }
 
 func TestProductionEntriesRouteRequiresAuthentication(t *testing.T) {
-	authH, authM, _, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -147,8 +149,8 @@ func TestProductionEntriesRouteRequiresAuthentication(t *testing.T) {
 }
 
 func TestLoginRouteRemainsPublic(t *testing.T) {
-	authH, authM, _, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	body := []byte(`{"email":"admin@example.com","password":"secret"}`)
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -161,8 +163,8 @@ func TestLoginRouteRemainsPublic(t *testing.T) {
 }
 
 func TestEmployeeCreateRequiresAdminRole(t *testing.T) {
-	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	body := []byte(`{"id":"emp-2","firstName":"Bob","lastName":"Worker","email":"bob@example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/employees", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -176,8 +178,8 @@ func TestEmployeeCreateRequiresAdminRole(t *testing.T) {
 }
 
 func TestProductListAllowsLeaderRole(t *testing.T) {
-	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	req := httptest.NewRequest(http.MethodGet, "/products", nil)
 	setAuthorization(t, req, tokens, auth.RoleLeader)
 	w := httptest.NewRecorder()
@@ -189,8 +191,8 @@ func TestProductListAllowsLeaderRole(t *testing.T) {
 }
 
 func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
-	authH, authM, tokens, empH, prodH, productionH := testHandlers(t)
-	s := New(config.Config{}, authH, authM, empH, prodH, productionH)
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
 	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -200,6 +202,79 @@ func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionOrdersRouteAllowsManagerCreate(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	body := []byte(`{"lines":[{"productSku":"sku-1","plannedQuantity":12}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionOrdersRouteRejectsWorkerCreate(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	body := []byte(`{"lines":[{"productSku":"sku-1","plannedQuantity":12}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionOrdersRouteAllowsLeaderRead(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	body := []byte(`{"lines":[{"productSku":"sku-1","plannedQuantity":12}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	createW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(createW, req)
+	if createW.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", createW.Code, createW.Body.String())
+	}
+	var createdOrder struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createW.Body).Decode(&createdOrder); err != nil {
+		t.Fatal(err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/production-orders/"+createdOrder.ID, nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionOrdersRouteRequiresAuthentication(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	body := []byte(`{"lines":[{"productSku":"sku-1","plannedQuantity":12}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

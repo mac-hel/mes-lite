@@ -16,6 +16,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/version"
@@ -28,7 +29,7 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler) *Server {
+func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 		fuego.WithSecurity(openapi3.SecuritySchemes{
@@ -64,6 +65,9 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, manageProducts)
 
 	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
+
+	fuego.Post(s, "/production-orders", ordersHandler.Create, manageProducts)
+	fuego.Get(s, "/production-orders/{id}", ordersHandler.Get, readMasterData)
 
 	return &Server{Server: s, cfg: cfg}
 }
