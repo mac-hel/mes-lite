@@ -81,7 +81,8 @@ func run() int {
 	productionHandler := production.NewHandler(productionService)
 
 	ordersStore := orders.NewPostgresStore(db)
-	ordersHandler := orders.NewHandler(ordersStore)
+	ordersService := orders.NewService(ordersStore, empStore, prodStore)
+	ordersHandler := orders.NewHandler(ordersService)
 
 	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler)
 

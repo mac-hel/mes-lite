@@ -46,6 +46,8 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	adminOnly := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin)))
 	readMasterData := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 	manageProducts := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
+	manageOrders := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
+	progressOrders := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 	registerProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader, auth.RoleWorker)))
 
 	fuego.Get(s, "/ready", readyHandler)
@@ -66,8 +68,13 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 
 	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
 
-	fuego.Post(s, "/production-orders", ordersHandler.Create, manageProducts)
+	fuego.Post(s, "/production-orders", ordersHandler.Create, manageOrders)
 	fuego.Get(s, "/production-orders/{id}", ordersHandler.Get, readMasterData)
+	fuego.Post(s, "/production-orders/{id}/assignments", ordersHandler.AssignEmployee, manageOrders)
+	fuego.Put(s, "/production-orders/{id}/release", ordersHandler.Release, progressOrders)
+	fuego.Put(s, "/production-orders/{id}/start", ordersHandler.Start, progressOrders)
+	fuego.Put(s, "/production-orders/{id}/complete", ordersHandler.Complete, progressOrders)
+	fuego.Put(s, "/production-orders/{id}/cancel", ordersHandler.Cancel, progressOrders)
 
 	return &Server{Server: s, cfg: cfg}
 }

@@ -14,3 +14,5 @@ What do you think about using collections as types of fields that contain multip
 - <REJECTED FOR NOW> `Order.assignedEmployees` (currently `[]string`, could be collection)
 
 ## Double id - UUID for user-facing, int for internal reference
+
+## Sanity tests?

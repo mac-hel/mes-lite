@@ -3,7 +3,6 @@ package orders
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,11 +10,13 @@ import (
 	"time"
 
 	"github.com/go-fuego/fuego"
+
+	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/products"
 )
 
 func TestHandler_Create(t *testing.T) {
-	store := NewInMemoryStore()
-	handler := NewHandler(store)
+	handler, _ := testHandler(t)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-orders", handler.Create)
 
@@ -59,8 +60,7 @@ func TestHandler_CreateValidation(t *testing.T) {
 		{"blank assigned employee", `{"lines":[{"productSku":"shaft-1","plannedQuantity":2}],"assignedEmployeeIds":[" "]}`},
 	}
 
-	store := NewInMemoryStore()
-	handler := NewHandler(store)
+	handler, _ := testHandler(t)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-orders", handler.Create)
 
@@ -79,8 +79,7 @@ func TestHandler_CreateValidation(t *testing.T) {
 }
 
 func TestHandler_CreateDuplicate(t *testing.T) {
-	store := NewInMemoryStore()
-	handler := NewHandler(store)
+	handler, _ := testHandler(t)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-orders", handler.Create)
 
@@ -93,19 +92,7 @@ func TestHandler_CreateDuplicate(t *testing.T) {
 		t.Fatalf("expected first create status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp OrderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
-	order, err := store.FindByID(t.Context(), resp.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Save(t.Context(), order); !errors.Is(err, ErrAlreadyExists) {
-		t.Fatalf("Save() error = %v, want ErrAlreadyExists", err)
-	}
-
-	duplicateHandler := NewHandler(alwaysDuplicateStore{})
+	duplicateHandler := NewHandler(alwaysDuplicateService{})
 	s = fuego.NewServer()
 	fuego.Post(s, "/production-orders", duplicateHandler.Create)
 	req = httptest.NewRequest(http.MethodPost, "/production-orders", strings.NewReader(body))
@@ -129,7 +116,7 @@ func TestHandler_Get(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := NewHandler(store)
+	handler := NewHandler(NewService(store, seededEmployeeStore(t), seededProductStore(t)))
 	s := fuego.NewServer()
 	fuego.Get(s, "/production-orders/{id}", handler.Get)
 	req := httptest.NewRequest(http.MethodGet, "/production-orders/order-1", nil)
@@ -150,8 +137,7 @@ func TestHandler_Get(t *testing.T) {
 }
 
 func TestHandler_GetNotFound(t *testing.T) {
-	store := NewInMemoryStore()
-	handler := NewHandler(store)
+	handler, _ := testHandler(t)
 	s := fuego.NewServer()
 	fuego.Get(s, "/production-orders/{id}", handler.Get)
 	req := httptest.NewRequest(http.MethodGet, "/production-orders/missing", nil)
@@ -163,20 +149,161 @@ func TestHandler_GetNotFound(t *testing.T) {
 	}
 }
 
+func TestHandler_AssignEmployee(t *testing.T) {
+	handler, store := testHandler(t)
+	order := mustPersistedOrder(t, store)
+	s := fuego.NewServer()
+	fuego.Post(s, "/production-orders/{id}/assignments", handler.AssignEmployee)
+
+	req := httptest.NewRequest(http.MethodPost, "/production-orders/"+order.ID()+"/assignments", strings.NewReader(`{"employeeId":"emp-1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp OrderResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.AssignedEmployeeIDs) != 1 || resp.AssignedEmployeeIDs[0] != "emp-1" {
+		t.Fatalf("assigned employees = %#v, want [emp-1]", resp.AssignedEmployeeIDs)
+	}
+}
+
+func TestHandler_ReleaseStartComplete(t *testing.T) {
+	handler, store := testHandler(t)
+	order := mustPersistedOrder(t, store)
+	if err := order.AssignEmployee("emp-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+	s := fuego.NewServer()
+	fuego.Put(s, "/production-orders/{id}/release", handler.Release)
+	fuego.Put(s, "/production-orders/{id}/start", handler.Start)
+	fuego.Put(s, "/production-orders/{id}/complete", handler.Complete)
+
+	assertTransition(t, s, "/production-orders/"+order.ID()+"/release", StatusReleased)
+	assertTransition(t, s, "/production-orders/"+order.ID()+"/start", StatusInProgress)
+	assertTransition(t, s, "/production-orders/"+order.ID()+"/complete", StatusCompleted)
+}
+
+func TestHandler_Cancel(t *testing.T) {
+	handler, store := testHandler(t)
+	order := mustPersistedOrder(t, store)
+	s := fuego.NewServer()
+	fuego.Put(s, "/production-orders/{id}/cancel", handler.Cancel)
+
+	assertTransition(t, s, "/production-orders/"+order.ID()+"/cancel", StatusCancelled)
+}
+
 func testNow() time.Time {
 	return time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+}
+
+func mustPersistedOrder(t *testing.T, store *InMemoryStore) Order {
+	t.Helper()
+	order, err := NewOrder("order-1", mustOrderLines(t, mustOrderLine(t, "shaft-1", 2)), testNow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+	return order
+}
+
+func assertTransition(t *testing.T, s *fuego.Server, path string, want Status) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPut, path, nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp OrderResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != want {
+		t.Fatalf("Status = %q, want %q", resp.Status, want)
+	}
 }
 
 func isUUIDShaped(id string) bool {
 	return len(id) == 36 && id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-'
 }
 
-type alwaysDuplicateStore struct{}
-
-func (alwaysDuplicateStore) Save(ctx context.Context, order Order) error {
-	return ErrAlreadyExists
+func testHandler(t *testing.T) (*Handler, *InMemoryStore) {
+	t.Helper()
+	store := NewInMemoryStore()
+	return NewHandler(NewService(store, seededEmployeeStore(t), seededProductStore(t))), store
 }
 
-func (alwaysDuplicateStore) FindByID(ctx context.Context, id string) (Order, error) {
+func seededEmployeeStore(t *testing.T) *employees.InMemoryStore {
+	t.Helper()
+	store := employees.NewInMemoryStore()
+	emp, err := employees.NewEmployee("emp-1", "Ana", "Worker", "ana@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(t.Context(), emp); err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func seededProductStore(t *testing.T) *products.InMemoryStore {
+	t.Helper()
+	store := products.NewInMemoryStore()
+	for _, product := range []struct {
+		sku      string
+		name     string
+		category products.ProductCategory
+	}{
+		{"shaft-1", "Shaft", products.CategoryVentilation},
+		{"filter-1", "Filter", products.CategoryFilter},
+	} {
+		prod, err := products.NewProduct(product.sku, product.name, "piece", product.category)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Save(t.Context(), prod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return store
+}
+
+type alwaysDuplicateService struct{}
+
+func (alwaysDuplicateService) Create(ctx context.Context, cmd CreateCommand) (Order, error) {
+	return Order{}, ErrAlreadyExists
+}
+
+func (alwaysDuplicateService) Get(ctx context.Context, id string) (Order, error) {
+	return Order{}, ErrNotFound
+}
+
+func (alwaysDuplicateService) AssignEmployee(ctx context.Context, cmd AssignEmployeeCommand) (Order, error) {
+	return Order{}, ErrNotFound
+}
+
+func (alwaysDuplicateService) Release(ctx context.Context, id string) (Order, error) {
+	return Order{}, ErrNotFound
+}
+
+func (alwaysDuplicateService) Start(ctx context.Context, id string) (Order, error) {
+	return Order{}, ErrNotFound
+}
+
+func (alwaysDuplicateService) Complete(ctx context.Context, id string) (Order, error) {
+	return Order{}, ErrNotFound
+}
+
+func (alwaysDuplicateService) Cancel(ctx context.Context, id string) (Order, error) {
 	return Order{}, ErrNotFound
 }

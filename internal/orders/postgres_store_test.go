@@ -146,6 +146,66 @@ func TestPostgresStore_SaveMissingEmployeeReferenceRollsBack(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_UpdateStatusAndAssignments(t *testing.T) {
+	store := testPostgresStore(t)
+	order := mustOrderWithLines(t, mustOrderLine(t, "shaft-1", 2))
+	if err := store.Save(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+	if err := order.AssignEmployee("emp-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := order.Release(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Update(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.FindByID(t.Context(), order.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOrdersEqual(t, order, got)
+}
+
+func TestPostgresStore_UpdateMissingOrder(t *testing.T) {
+	store := testPostgresStore(t)
+	order := mustOrderWithLines(t, mustOrderLine(t, "shaft-1", 2))
+
+	err := store.Update(t.Context(), order)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Update() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestPostgresStore_UpdateMissingEmployeeReferenceRollsBack(t *testing.T) {
+	store := testPostgresStore(t)
+	order := mustOrderWithLines(t, mustOrderLine(t, "shaft-1", 2))
+	if err := store.Save(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+	if err := order.AssignEmployee("missing-employee", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	err := store.Update(t.Context(), order)
+	if !errors.Is(err, ErrInvalidOrder) {
+		t.Fatalf("Update() error = %v, want ErrInvalidOrder", err)
+	}
+	got, err := store.FindByID(t.Context(), order.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status() != StatusDraft {
+		t.Fatalf("expected failed update to keep draft status, got %q", got.Status())
+	}
+	if len(got.AssignedEmployees()) != 0 {
+		t.Fatalf("expected failed update to keep no assignments, got %#v", got.AssignedEmployees())
+	}
+}
+
 func seedOrderReferences(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `

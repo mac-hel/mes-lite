@@ -52,8 +52,9 @@ func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenMan
 
 	productionService := production.NewService(productionStore, empStore, prodStore)
 	ordersStore := orders.NewInMemoryStore()
+	ordersService := orders.NewService(ordersStore, empStore, prodStore)
 
-	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService), orders.NewHandler(ordersStore)
+	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService), orders.NewHandler(ordersService)
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -278,6 +279,42 @@ func TestProductionOrdersRouteRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestProductionOrdersAssignmentRequiresManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	orderID := createProductionOrder(t, s, tokens)
+	body := []byte(`{"employeeId":"emp-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders/"+orderID+"/assignments", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionOrdersReleaseAllowsLeaderRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH)
+	orderID := createProductionOrder(t, s, tokens)
+	body := []byte(`{"employeeId":"emp-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders/"+orderID+"/assignments", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	s.Mux.ServeHTTP(httptest.NewRecorder(), req)
+
+	req = httptest.NewRequest(http.MethodPut, "/production-orders/"+orderID+"/release", nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager, role auth.Role) {
 	t.Helper()
 	user, err := auth.NewUser("user-1", "user@example.com", "secret", role)
@@ -289,4 +326,24 @@ func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager
 		t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+func createProductionOrder(t *testing.T, s *Server, tokens *auth.TokenManager) string {
+	t.Helper()
+	body := []byte(`{"lines":[{"productSku":"sku-1","plannedQuantity":12}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-orders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	return created.ID
 }

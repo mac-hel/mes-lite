@@ -86,6 +86,16 @@ func (q *Queries) CreateOrderLine(ctx context.Context, arg CreateOrderLineParams
 	return err
 }
 
+const deleteOrderAssignments = `-- name: DeleteOrderAssignments :exec
+DELETE FROM production_order_assignments
+WHERE order_id = $1
+`
+
+func (q *Queries) DeleteOrderAssignments(ctx context.Context, orderID string) error {
+	_, err := q.db.Exec(ctx, deleteOrderAssignments, orderID)
+	return err
+}
+
 const getOrder = `-- name: GetOrder :one
 SELECT id, status, created_at, updated_at
 FROM production_orders
@@ -156,4 +166,30 @@ func (q *Queries) ListOrderLines(ctx context.Context, orderID string) ([]Product
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateOrder = `-- name: UpdateOrder :one
+UPDATE production_orders
+SET status = $2,
+    updated_at = $3
+WHERE id = $1
+RETURNING id, status, created_at, updated_at
+`
+
+type UpdateOrderParams struct {
+	ID        string             `json:"id"`
+	Status    string             `json:"status"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (ProductionOrder, error) {
+	row := q.db.QueryRow(ctx, updateOrder, arg.ID, arg.Status, arg.UpdatedAt)
+	var i ProductionOrder
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

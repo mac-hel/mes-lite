@@ -78,6 +78,48 @@ func (s *PostgresStore) Save(ctx context.Context, order Order) error {
 	return nil
 }
 
+// Update stores mutable production order state atomically.
+func (s *PostgresStore) Update(ctx context.Context, order Order) error {
+	if err := order.Validate(); err != nil {
+		return err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	queries := s.queries.WithTx(tx)
+	if _, err := queries.UpdateOrder(ctx, ordersdb.UpdateOrderParams{
+		ID:        order.ID(),
+		Status:    string(order.Status()),
+		UpdatedAt: timestamptz(order.UpdatedAt()),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("production order %q: %w", order.ID(), ErrNotFound)
+		}
+		return mapPostgresError(order.ID(), err)
+	}
+	if err := queries.DeleteOrderAssignments(ctx, order.ID()); err != nil {
+		return err
+	}
+	for _, employeeID := range order.AssignedEmployees() {
+		if err := queries.CreateOrderAssignment(ctx, ordersdb.CreateOrderAssignmentParams{
+			OrderID:    order.ID(),
+			EmployeeID: employeeID,
+		}); err != nil {
+			return mapPostgresError(order.ID(), err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // FindByID looks up a production order by ID in PostgreSQL.
 func (s *PostgresStore) FindByID(ctx context.Context, id string) (Order, error) {
 	row, err := s.queries.GetOrder(ctx, id)

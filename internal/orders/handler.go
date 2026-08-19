@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -10,12 +11,23 @@ import (
 
 // Handler holds the HTTP handler methods for production orders.
 type Handler struct {
-	store Store
+	service OrderService
 }
 
-// NewHandler creates a new Handler with the given Store.
-func NewHandler(store Store) *Handler {
-	return &Handler{store: store}
+// OrderService defines the order workflows needed by HTTP.
+type OrderService interface {
+	Create(ctx context.Context, cmd CreateCommand) (Order, error)
+	Get(ctx context.Context, id string) (Order, error)
+	AssignEmployee(ctx context.Context, cmd AssignEmployeeCommand) (Order, error)
+	Release(ctx context.Context, id string) (Order, error)
+	Start(ctx context.Context, id string) (Order, error)
+	Complete(ctx context.Context, id string) (Order, error)
+	Cancel(ctx context.Context, id string) (Order, error)
+}
+
+// NewHandler creates a new Handler with the given service.
+func NewHandler(service OrderService) *Handler {
+	return &Handler{service: service}
 }
 
 // CreateOrderRequest is the expected JSON body for creating a production order.
@@ -28,6 +40,11 @@ type CreateOrderRequest struct {
 type CreateOrderLineRequest struct {
 	ProductSKU      string `json:"productSku"      validate:"required"`
 	PlannedQuantity int    `json:"plannedQuantity" validate:"required,min=1"`
+}
+
+// AssignEmployeeRequest is the expected JSON body for assigning an employee to an order.
+type AssignEmployeeRequest struct {
+	EmployeeID string `json:"employeeId" validate:"required"`
 }
 
 // OrderResponse is the JSON representation of a production order.
@@ -53,40 +70,14 @@ func (h *Handler) Create(c fuego.ContextWithBody[CreateOrderRequest]) (OrderResp
 		return OrderResponse{}, err
 	}
 
-	lines := make([]OrderLine, 0, len(body.Lines))
+	lines := make([]CreateLineCommand, 0, len(body.Lines))
 	for _, requestLine := range body.Lines {
-		line, err := NewOrderLine(requestLine.ProductSKU, requestLine.PlannedQuantity)
-		if err != nil {
-			return OrderResponse{}, invalidOrderError(err)
-		}
-		lines = append(lines, line)
-	}
-	orderLines, err := NewOrderLines(lines...)
-	if err != nil {
-		return OrderResponse{}, invalidOrderError(err)
-	}
-	id, err := NewOrderID()
-	if err != nil {
-		return OrderResponse{}, err
-	}
-	order, err := NewOrder(id, orderLines, time.Now())
-	if err != nil {
-		return OrderResponse{}, invalidOrderError(err)
-	}
-	for _, employeeID := range body.AssignedEmployeeIDs {
-		if err := order.AssignEmployee(employeeID, time.Now()); err != nil {
-			return OrderResponse{}, invalidOrderError(err)
-		}
+		lines = append(lines, CreateLineCommand(requestLine))
 	}
 
-	if err := h.store.Save(c.Context(), order); err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
-			return OrderResponse{}, fuego.ConflictError{Err: err, Detail: fmt.Sprintf("production order %q already exists", order.ID())}
-		}
-		if errors.Is(err, ErrInvalidOrder) {
-			return OrderResponse{}, invalidOrderError(err)
-		}
-		return OrderResponse{}, err
+	order, err := h.service.Create(c.Context(), CreateCommand{Lines: lines, AssignedEmployeeIDs: body.AssignedEmployeeIDs})
+	if err != nil {
+		return OrderResponse{}, orderHTTPError(err, "")
 	}
 
 	return orderResponse(order), nil
@@ -95,12 +86,54 @@ func (h *Handler) Create(c fuego.ContextWithBody[CreateOrderRequest]) (OrderResp
 // Get handles GET /production-orders/{id} and returns one production order.
 func (h *Handler) Get(c fuego.ContextNoBody) (OrderResponse, error) {
 	id := c.PathParam("id")
-	order, err := h.store.FindByID(c.Context(), id)
+	order, err := h.service.Get(c.Context(), id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return OrderResponse{}, fuego.NotFoundError{Err: err, Detail: fmt.Sprintf("production order %q not found", id)}
-		}
+		return OrderResponse{}, orderHTTPError(err, id)
+	}
+
+	return orderResponse(order), nil
+}
+
+// AssignEmployee handles POST /production-orders/{id}/assignments.
+func (h *Handler) AssignEmployee(c fuego.ContextWithBody[AssignEmployeeRequest]) (OrderResponse, error) {
+	body, err := c.Body()
+	if err != nil {
 		return OrderResponse{}, err
+	}
+	id := c.PathParam("id")
+	order, err := h.service.AssignEmployee(c.Context(), AssignEmployeeCommand{OrderID: id, EmployeeID: body.EmployeeID})
+	if err != nil {
+		return OrderResponse{}, orderHTTPError(err, id)
+	}
+
+	return orderResponse(order), nil
+}
+
+// Release handles PUT /production-orders/{id}/release.
+func (h *Handler) Release(c fuego.ContextNoBody) (OrderResponse, error) {
+	return h.transition(c, h.service.Release)
+}
+
+// Start handles PUT /production-orders/{id}/start.
+func (h *Handler) Start(c fuego.ContextNoBody) (OrderResponse, error) {
+	return h.transition(c, h.service.Start)
+}
+
+// Complete handles PUT /production-orders/{id}/complete.
+func (h *Handler) Complete(c fuego.ContextNoBody) (OrderResponse, error) {
+	return h.transition(c, h.service.Complete)
+}
+
+// Cancel handles PUT /production-orders/{id}/cancel.
+func (h *Handler) Cancel(c fuego.ContextNoBody) (OrderResponse, error) {
+	return h.transition(c, h.service.Cancel)
+}
+
+func (h *Handler) transition(c fuego.ContextNoBody, change func(context.Context, string) (Order, error)) (OrderResponse, error) {
+	id := c.PathParam("id")
+	order, err := change(c.Context(), id)
+	if err != nil {
+		return OrderResponse{}, orderHTTPError(err, id)
 	}
 
 	return orderResponse(order), nil
@@ -129,4 +162,20 @@ func orderResponse(order Order) OrderResponse {
 
 func invalidOrderError(err error) fuego.BadRequestError {
 	return fuego.BadRequestError{Err: err, Detail: err.Error()}
+}
+
+func orderHTTPError(err error, id string) error {
+	if errors.Is(err, ErrAlreadyExists) {
+		return fuego.ConflictError{Err: err, Detail: "production order already exists"}
+	}
+	if errors.Is(err, ErrNotFound) {
+		return fuego.NotFoundError{Err: err, Detail: fmt.Sprintf("production order %q not found", id)}
+	}
+	if errors.Is(err, ErrInvalidOrder) || errors.Is(err, ErrInvalidTransition) || errors.Is(err, ErrEmployeeInactive) || errors.Is(err, ErrProductInactive) {
+		return invalidOrderError(err)
+	}
+	if errors.Is(err, ErrEmployeeNotFound) || errors.Is(err, ErrProductNotFound) {
+		return fuego.NotFoundError{Err: err, Detail: err.Error()}
+	}
+	return err
 }

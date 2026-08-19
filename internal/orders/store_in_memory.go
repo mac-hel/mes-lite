@@ -42,3 +42,18 @@ func (s *InMemoryStore) FindByID(ctx context.Context, id string) (Order, error) 
 	}
 	return order, nil
 }
+
+// Update replaces an existing production order.
+func (s *InMemoryStore) Update(ctx context.Context, order Order) error {
+	if err := order.Validate(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.orders[order.ID()]; !exists {
+		return fmt.Errorf("production order %q: %w", order.ID(), ErrNotFound)
+	}
+	s.orders[order.ID()] = order
+	return nil
+}
