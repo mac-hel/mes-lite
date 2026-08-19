@@ -43,6 +43,7 @@ func (s *PostgresStore) Save(ctx context.Context, order Order) error {
 	if _, err := queries.CreateOrder(ctx, ordersdb.CreateOrderParams{
 		ID:        order.ID(),
 		Status:    string(order.Status()),
+		Version:   int32(order.Version()),
 		CreatedAt: timestamptz(order.CreatedAt()),
 		UpdatedAt: timestamptz(order.UpdatedAt()),
 	}); err != nil {
@@ -78,7 +79,7 @@ func (s *PostgresStore) Save(ctx context.Context, order Order) error {
 	return nil
 }
 
-// Update stores mutable production order state atomically.
+// Update stores mutable production order state atomically and increments its version.
 func (s *PostgresStore) Update(ctx context.Context, order Order) error {
 	if err := order.Validate(); err != nil {
 		return err
@@ -95,9 +96,10 @@ func (s *PostgresStore) Update(ctx context.Context, order Order) error {
 		ID:        order.ID(),
 		Status:    string(order.Status()),
 		UpdatedAt: timestamptz(order.UpdatedAt()),
+		Version:   int32(order.Version()),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("production order %q: %w", order.ID(), ErrNotFound)
+			return s.updateNoRowsError(ctx, order.ID(), order.Version())
 		}
 		return mapPostgresError(order.ID(), err)
 	}
@@ -157,7 +159,15 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Order, error) 
 		return Order{}, err
 	}
 
-	return RestoreOrder(row.ID, orderLines, Status(row.Status), assignedEmployees, row.CreatedAt.Time, row.UpdatedAt.Time)
+	return RestoreOrder(row.ID, orderLines, Status(row.Status), assignedEmployees, int(row.Version), row.CreatedAt.Time, row.UpdatedAt.Time)
+}
+
+func (s *PostgresStore) updateNoRowsError(ctx context.Context, id string, version int) error {
+	_, err := s.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("production order %q version %d: %w", id, version, ErrVersionConflict)
 }
 
 func timestamptz(t time.Time) pgtype.Timestamptz {

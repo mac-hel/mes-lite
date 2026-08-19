@@ -123,7 +123,7 @@ func (s *Service) AssignEmployee(ctx context.Context, cmd AssignEmployeeCommand)
 		return Order{}, err
 	}
 
-	return order, nil
+	return s.orders.FindByID(ctx, order.ID())
 }
 
 // Release moves a draft order into released status.
@@ -158,7 +158,7 @@ func (s *Service) transition(ctx context.Context, id string, change func(*Order)
 		return Order{}, err
 	}
 
-	return order, nil
+	return s.orders.FindByID(ctx, order.ID())
 }
 
 func (s *Service) validateEmployee(ctx context.Context, id string) error {

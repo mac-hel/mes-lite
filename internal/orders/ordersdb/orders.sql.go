@@ -15,31 +15,43 @@ const createOrder = `-- name: CreateOrder :one
 INSERT INTO production_orders (
     id,
     status,
+    version,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4
-) RETURNING id, status, created_at, updated_at
+    $1, $2, $3, $4, $5
+) RETURNING id, status, version, created_at, updated_at
 `
 
 type CreateOrderParams struct {
 	ID        string             `json:"id"`
 	Status    string             `json:"status"`
+	Version   int32              `json:"version"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (ProductionOrder, error) {
+type CreateOrderRow struct {
+	ID        string             `json:"id"`
+	Status    string             `json:"status"`
+	Version   int32              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (CreateOrderRow, error) {
 	row := q.db.QueryRow(ctx, createOrder,
 		arg.ID,
 		arg.Status,
+		arg.Version,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
-	var i ProductionOrder
+	var i CreateOrderRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -97,17 +109,26 @@ func (q *Queries) DeleteOrderAssignments(ctx context.Context, orderID string) er
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, status, created_at, updated_at
+SELECT id, status, version, created_at, updated_at
 FROM production_orders
 WHERE id = $1
 `
 
-func (q *Queries) GetOrder(ctx context.Context, id string) (ProductionOrder, error) {
+type GetOrderRow struct {
+	ID        string             `json:"id"`
+	Status    string             `json:"status"`
+	Version   int32              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetOrder(ctx context.Context, id string) (GetOrderRow, error) {
 	row := q.db.QueryRow(ctx, getOrder, id)
-	var i ProductionOrder
+	var i GetOrderRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -171,23 +192,39 @@ func (q *Queries) ListOrderLines(ctx context.Context, orderID string) ([]Product
 const updateOrder = `-- name: UpdateOrder :one
 UPDATE production_orders
 SET status = $2,
-    updated_at = $3
-WHERE id = $1
-RETURNING id, status, created_at, updated_at
+    updated_at = $3,
+    version = version + 1
+WHERE id = $1 AND version = $4
+RETURNING id, status, version, created_at, updated_at
 `
 
 type UpdateOrderParams struct {
 	ID        string             `json:"id"`
 	Status    string             `json:"status"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Version   int32              `json:"version"`
 }
 
-func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (ProductionOrder, error) {
-	row := q.db.QueryRow(ctx, updateOrder, arg.ID, arg.Status, arg.UpdatedAt)
-	var i ProductionOrder
+type UpdateOrderRow struct {
+	ID        string             `json:"id"`
+	Status    string             `json:"status"`
+	Version   int32              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (UpdateOrderRow, error) {
+	row := q.db.QueryRow(ctx, updateOrder,
+		arg.ID,
+		arg.Status,
+		arg.UpdatedAt,
+		arg.Version,
+	)
+	var i UpdateOrderRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

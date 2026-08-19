@@ -43,7 +43,7 @@ func (s *InMemoryStore) FindByID(ctx context.Context, id string) (Order, error) 
 	return order, nil
 }
 
-// Update replaces an existing production order.
+// Update replaces an existing production order and increments its version.
 func (s *InMemoryStore) Update(ctx context.Context, order Order) error {
 	if err := order.Validate(); err != nil {
 		return err
@@ -51,9 +51,13 @@ func (s *InMemoryStore) Update(ctx context.Context, order Order) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.orders[order.ID()]; !exists {
+	current, exists := s.orders[order.ID()]
+	if !exists {
 		return fmt.Errorf("production order %q: %w", order.ID(), ErrNotFound)
 	}
-	s.orders[order.ID()] = order
+	if current.Version() != order.Version() {
+		return fmt.Errorf("production order %q version %d: %w", order.ID(), order.Version(), ErrVersionConflict)
+	}
+	s.orders[order.ID()] = order.incrementVersion()
 	return nil
 }

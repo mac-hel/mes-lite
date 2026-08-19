@@ -22,6 +22,9 @@ var ErrNotFound = errors.New("production order not found")
 // ErrAlreadyExists is returned when trying to create a duplicate production order.
 var ErrAlreadyExists = errors.New("production order already exists")
 
+// ErrVersionConflict is returned when an update uses a stale production order version.
+var ErrVersionConflict = errors.New("production order version conflict")
+
 // Status describes the production order lifecycle.
 type Status string
 
@@ -139,6 +142,7 @@ type Order struct {
 	lines             OrderLines
 	status            Status
 	assignedEmployees []string
+	version           int
 	createdAt         time.Time
 	updatedAt         time.Time
 }
@@ -150,6 +154,7 @@ func NewOrder(id string, lines OrderLines, now time.Time) (Order, error) {
 		id:        strings.TrimSpace(id),
 		lines:     lines,
 		status:    StatusDraft,
+		version:   1,
 		createdAt: createdAt,
 		updatedAt: createdAt,
 	}
@@ -185,12 +190,13 @@ func NewOrderID() (string, error) {
 }
 
 // RestoreOrder rebuilds a persisted order while preserving aggregate validation.
-func RestoreOrder(id string, lines OrderLines, status Status, assignedEmployees []string, createdAt, updatedAt time.Time) (Order, error) {
+func RestoreOrder(id string, lines OrderLines, status Status, assignedEmployees []string, version int, createdAt, updatedAt time.Time) (Order, error) {
 	order := Order{
 		id:                strings.TrimSpace(id),
 		lines:             lines,
 		status:            status,
 		assignedEmployees: copyAssignedEmployees(assignedEmployees),
+		version:           version,
 		createdAt:         createdAt.UTC(),
 		updatedAt:         updatedAt.UTC(),
 	}
@@ -221,6 +227,11 @@ func (o Order) AssignedEmployees() []string {
 	return copyAssignedEmployees(o.assignedEmployees)
 }
 
+// Version returns the optimistic-locking version for this aggregate root.
+func (o Order) Version() int {
+	return o.version
+}
+
 // CreatedAt returns the timestamp when the order was created.
 func (o Order) CreatedAt() time.Time {
 	return o.createdAt
@@ -238,6 +249,9 @@ func (o Order) Validate() error {
 	}
 	if !o.status.Valid() {
 		return fmt.Errorf("status %q is not supported: %w", o.status, ErrInvalidOrder)
+	}
+	if o.version <= 0 {
+		return fmt.Errorf("version must be greater than zero: %w", ErrInvalidOrder)
 	}
 	if o.createdAt.IsZero() {
 		return fmt.Errorf("created at is required: %w", ErrInvalidOrder)
@@ -351,6 +365,12 @@ func (o Order) hasAssignedEmployee(employeeID string) bool {
 	}
 
 	return false
+}
+
+func (o Order) incrementVersion() Order {
+	updated := o
+	updated.version++
+	return updated
 }
 
 func copyAssignedEmployees(employeeIDs []string) []string {

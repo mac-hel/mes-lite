@@ -31,6 +31,9 @@ func TestNewOrder_NormalizesTextAndTimestamps(t *testing.T) {
 	if order.Status() != StatusDraft {
 		t.Errorf("Status = %q, want %q", order.Status(), StatusDraft)
 	}
+	if order.Version() != 1 {
+		t.Errorf("Version = %d, want 1", order.Version())
+	}
 	if order.CreatedAt().Location() != time.UTC {
 		t.Errorf("CreatedAt location = %s, want UTC", order.CreatedAt().Location())
 	}

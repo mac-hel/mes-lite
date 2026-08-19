@@ -89,6 +89,9 @@ func TestPostgresStore_SaveAndFindByID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got.Version() != 1 {
+		t.Fatalf("Version = %d, want 1", got.Version())
+	}
 	assertOrdersEqual(t, order, got)
 }
 
@@ -167,7 +170,36 @@ func TestPostgresStore_UpdateStatusAndAssignments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertOrdersEqual(t, order, got)
+	want := order.incrementVersion()
+	assertOrdersEqual(t, want, got)
+}
+
+func TestPostgresStore_UpdateVersionConflict(t *testing.T) {
+	store := testPostgresStore(t)
+	order := mustOrderWithLines(t, mustOrderLine(t, "shaft-1", 2))
+	if err := store.Save(t.Context(), order); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.FindByID(t.Context(), order.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := current
+	if err := first.AssignEmployee("emp-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(t.Context(), first); err != nil {
+		t.Fatal(err)
+	}
+	stale := current
+	if err := stale.Cancel(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	err = store.Update(t.Context(), stale)
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("Update() error = %v, want ErrVersionConflict", err)
+	}
 }
 
 func TestPostgresStore_UpdateMissingOrder(t *testing.T) {
@@ -200,6 +232,9 @@ func TestPostgresStore_UpdateMissingEmployeeReferenceRollsBack(t *testing.T) {
 	}
 	if got.Status() != StatusDraft {
 		t.Fatalf("expected failed update to keep draft status, got %q", got.Status())
+	}
+	if got.Version() != 1 {
+		t.Fatalf("expected failed update to keep version 1, got %d", got.Version())
 	}
 	if len(got.AssignedEmployees()) != 0 {
 		t.Fatalf("expected failed update to keep no assignments, got %#v", got.AssignedEmployees())
@@ -237,6 +272,9 @@ func assertOrdersEqual(t *testing.T, want, got Order) {
 	}
 	if !got.UpdatedAt().Equal(want.UpdatedAt()) {
 		t.Fatalf("UpdatedAt = %s, want %s", got.UpdatedAt(), want.UpdatedAt())
+	}
+	if got.Version() != want.Version() {
+		t.Fatalf("Version = %d, want %d", got.Version(), want.Version())
 	}
 	assertOrderLinesEqual(t, want.Lines(), got.Lines())
 	assertStringsEqual(t, want.AssignedEmployees(), got.AssignedEmployees())

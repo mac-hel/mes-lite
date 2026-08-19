@@ -53,6 +53,7 @@ type OrderResponse struct {
 	Lines               []OrderLineResponse `json:"lines"`
 	Status              Status              `json:"status"`
 	AssignedEmployeeIDs []string            `json:"assignedEmployeeIds"`
+	Version             int                 `json:"version"`
 	CreatedAt           time.Time           `json:"createdAt"`
 	UpdatedAt           time.Time           `json:"updatedAt"`
 }
@@ -155,6 +156,7 @@ func orderResponse(order Order) OrderResponse {
 		Lines:               lineResponses,
 		Status:              order.Status(),
 		AssignedEmployeeIDs: assignedEmployees,
+		Version:             order.Version(),
 		CreatedAt:           order.CreatedAt(),
 		UpdatedAt:           order.UpdatedAt(),
 	}
@@ -167,6 +169,9 @@ func invalidOrderError(err error) fuego.BadRequestError {
 func orderHTTPError(err error, id string) error {
 	if errors.Is(err, ErrAlreadyExists) {
 		return fuego.ConflictError{Err: err, Detail: "production order already exists"}
+	}
+	if errors.Is(err, ErrVersionConflict) {
+		return fuego.ConflictError{Err: err, Detail: "production order version conflict"}
 	}
 	if errors.Is(err, ErrNotFound) {
 		return fuego.NotFoundError{Err: err, Detail: fmt.Sprintf("production order %q not found", id)}

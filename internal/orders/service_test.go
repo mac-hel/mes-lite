@@ -64,6 +64,9 @@ func TestService_AssignEmployee(t *testing.T) {
 	if len(updated.AssignedEmployees()) != 1 || updated.AssignedEmployees()[0] != "emp-1" {
 		t.Fatalf("AssignedEmployees = %#v, want [emp-1]", updated.AssignedEmployees())
 	}
+	if updated.Version() != order.Version()+1 {
+		t.Fatalf("Version = %d, want %d", updated.Version(), order.Version()+1)
+	}
 }
 
 func TestService_AssignEmployeeRejectsMissingEmployee(t *testing.T) {
@@ -109,6 +112,9 @@ func TestService_StatusTransitions(t *testing.T) {
 	}
 	if order.Status() != StatusReleased {
 		t.Fatalf("Status = %q, want %q", order.Status(), StatusReleased)
+	}
+	if order.Version() != 3 {
+		t.Fatalf("Version after release = %d, want 3", order.Version())
 	}
 	order, err = service.Start(t.Context(), order.ID())
 	if err != nil {

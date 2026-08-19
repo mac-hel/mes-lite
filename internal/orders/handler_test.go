@@ -46,6 +46,9 @@ func TestHandler_Create(t *testing.T) {
 	if len(resp.AssignedEmployeeIDs) != 1 || resp.AssignedEmployeeIDs[0] != "emp-1" {
 		t.Fatalf("assigned employees = %#v, want [emp-1]", resp.AssignedEmployeeIDs)
 	}
+	if resp.Version != 1 {
+		t.Fatalf("Version = %d, want 1", resp.Version)
+	}
 }
 
 func TestHandler_CreateValidation(t *testing.T) {
@@ -133,6 +136,9 @@ func TestHandler_Get(t *testing.T) {
 	}
 	if resp.ID != "order-1" {
 		t.Fatalf("ID = %q, want order-1", resp.ID)
+	}
+	if resp.Version != 1 {
+		t.Fatalf("Version = %d, want 1", resp.Version)
 	}
 }
 
@@ -230,6 +236,9 @@ func assertTransition(t *testing.T, s *fuego.Server, path string, want Status) {
 	}
 	if resp.Status != want {
 		t.Fatalf("Status = %q, want %q", resp.Status, want)
+	}
+	if resp.Version <= 1 {
+		t.Fatalf("Version = %d, want incremented version", resp.Version)
 	}
 }
 
