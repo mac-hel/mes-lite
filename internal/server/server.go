@@ -19,6 +19,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
+	"github.com/mac-hel/mes-lite/internal/reporting"
 	"github.com/mac-hel/mes-lite/internal/version"
 )
 
@@ -29,7 +30,7 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler) *Server {
+func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler, reportingHandler *reporting.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 		fuego.WithSecurity(openapi3.SecuritySchemes{
@@ -49,6 +50,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	manageOrders := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
 	progressOrders := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 	registerProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader, auth.RoleWorker)))
+	readReports := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
@@ -75,6 +77,8 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	fuego.Put(s, "/production-orders/{id}/start", ordersHandler.Start, progressOrders)
 	fuego.Put(s, "/production-orders/{id}/complete", ordersHandler.Complete, progressOrders)
 	fuego.Put(s, "/production-orders/{id}/cancel", ordersHandler.Cancel, progressOrders)
+
+	fuego.Get(s, "/reports/daily-production", reportingHandler.DailyProduction, readReports)
 
 	return &Server{Server: s, cfg: cfg}
 }

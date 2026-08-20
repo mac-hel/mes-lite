@@ -308,6 +308,8 @@ when necessary.
         - var now time.Time = time.Now().UTC()
         - var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
         - ttl.IsZero()
+	    - s := now.Format(time.RFC3339) / now, err := time.Parse(time.RFC3339, s)
+
 - `os.Exit` - does not trigger deferred functions
 - `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
 - blank imports
