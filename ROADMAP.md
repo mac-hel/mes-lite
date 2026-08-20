@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.22
+**Version:** 2.23
 **Status:** IN PROGRESS
-**Current milestone:** 8 - Reporting
-**Current lesson:** L8.5 - Reporting Review & Query Performance
+**Current milestone:** 9 - CSV Import
+**Current lesson:** L9.1 - CSV Import Design & Streaming Reader
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -36,11 +36,12 @@ This section must always reflect the current progress.
 - Milestone 5
 - Milestone 6
 - Milestone 7
-**Next milestone:** 9 - CSV Import
+- Milestone 8
+**Next milestone:** 10 - Background Jobs & Concurrency
 **Current branch:** main
-**Architecture maturity:** 7.4 / 10
-**Go knowledge progress:** 59%
-**Interview readiness:** 53%
+**Architecture maturity:** 7.6 / 10
+**Go knowledge progress:** 61%
+**Interview readiness:** 55%
 **Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow.
 
 The AI must update this section at the end of every lesson and milestone.
@@ -129,7 +130,7 @@ The AI should update it after every completed milestone.
 - [x] sqlc
 - [x] Transactions
 - [x] Optimistic Locking
-- [ ] SQL Optimization
+- [x] SQL Optimization
 
 **Testing**
 - [x] Unit Tests
@@ -156,7 +157,7 @@ The AI should update it after every completed milestone.
 
 **SQL**
 - [ ] Isolation Levels
-- [ ] Indexes
+- [x] Indexes
 - [ ] Explain Analyze
 
 **Performance**
@@ -3885,7 +3886,7 @@ Production can be planned before execution.
 
 Status
 
-🚧 In Progress
+✅ Completed
 
 ### Lessons
 
@@ -3893,7 +3894,7 @@ Status
 - **L8.2** — Daily Production Report API ✅
 - **L8.3** — Employee Productivity Report API ✅
 - **L8.4** — Product Statistics Report API ✅
-- **L8.5** — Reporting Review & Query Performance
+- **L8.5** — Reporting Review & Query Performance ✅
 
 ### Lesson 8.1 Scope
 
@@ -4289,6 +4290,133 @@ An experienced Go engineer would approve the explicit read-model approach and de
 - Lesson 8.4 completed.
 - Current lesson moved to Lesson 8.5.
 
+### Lesson 8.5 Scope
+
+Review the reporting slice and add the first query-performance guardrail before closing Milestone 8.
+
+#### Business Context
+
+Reports will become slower as production history grows. Managers need report endpoints to remain predictable without turning every request into a full-table scan over production history.
+
+#### Problem
+
+The reporting queries were correct and tested, but `production_entries` had no reporting-oriented index. All three reports filter by `occurred_at` before grouping by product or employee.
+
+#### Design Discussion
+
+Added one targeted covering index on `production_entries` for the reporting access pattern: `(occurred_at, product_sku, employee_id) INCLUDE (quantity)`. This supports the shared time-range filter and keeps product, employee and quantity data available from the index for aggregation-heavy reports.
+
+This is intentionally one index, not several speculative indexes. Indexes speed reads but slow writes and consume storage. More indexes should be added only after real query plans or production-like data show a need.
+
+#### Go Concepts
+
+- integration tests that verify migration side effects
+- keeping performance behavior explicit through schema migrations
+- reviewing abstractions before adding more code
+
+#### SQL Concepts
+
+- B-tree indexes for range predicates
+- covering indexes with `INCLUDE`
+- trade-offs between read speed, write cost and storage
+- query-performance review before premature optimization
+
+### Lesson 8.5 Completion Notes
+
+#### Business Context
+
+Milestone 8 now has useful management reports and a first database-level performance guardrail for report time-range queries.
+
+#### Problem
+
+Reports were implemented, but there was no index supporting their common access pattern. As production entries grow, report queries would increasingly depend on scanning the whole table.
+
+#### Design Discussion
+
+The three report queries share the same shape: filter production entries by `occurred_at`, then aggregate by product or employee. A single covering index is the smallest useful improvement.
+
+The lesson did not introduce caching, materialized views or background report generation. Those are valid future tools, but they would be premature before measuring real query cost on larger data.
+
+#### Implementation
+
+- Added migration `0008_add_reporting_indexes.sql`.
+- Added `production_entries_reporting_idx` on `(occurred_at, product_sku, employee_id) INCLUDE (quantity)`.
+- Added integration test proving the reporting index exists after migrations.
+
+#### Tests
+
+- Verified with `go fmt ./internal/reporting`.
+- Verified with `sqlc generate`.
+- Verified with `go test ./internal/reporting -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No report abstraction was added. Three explicit report methods remain clearer than a generic reporting engine.
+
+#### Code Review
+
+An experienced Go engineer would approve the reporting slice for this milestone: read models are explicit, SQL is readable, generated sqlc code stays below the package boundary, routes are protected and tests cover query correctness and authorization.
+
+The main caveat is that performance was improved with a reasoned index, not proven with production-scale `EXPLAIN ANALYZE`. That is acceptable at this project stage, but future performance work should use realistic row counts.
+
+#### Exercises
+
+- Run `EXPLAIN ANALYZE` for each report query before and after adding sample data.
+- Compare one covering index with separate `(occurred_at, employee_id)` and `(occurred_at, product_sku)` indexes.
+- Explain how additional indexes affect production-entry insert performance.
+
+#### Interview Questions
+
+- Why does every index have a write-time cost?
+- What is a covering index?
+- Why should performance optimization be measurement-driven?
+- When would a materialized view be better than querying base tables directly?
+
+#### Roadmap Update
+
+- Lesson 8.5 completed.
+- Milestone 8 completed.
+- Current milestone moved to Milestone 9.
+- Current lesson moved to Lesson 9.1.
+- Persistence `SQL Optimization` and SQL `Indexes` marked complete in the Knowledge Matrix.
+
+### Milestone 8 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve the milestone direction. Reporting is isolated in `internal/reporting`, uses CQRS-style read models and does not pollute command-oriented slices with aggregate queries.
+
+The reporting package intentionally reads across production, employees and products. This is acceptable because reporting is a read-side projection layer. Business writes and invariants remain owned by their original slices.
+
+#### Code Review
+
+The code remains explicit and idiomatic. There is no generic report framework, no dynamic SQL and no leaking sqlc row types into HTTP handlers. Each endpoint has a clear DTO and route-level RBAC.
+
+The main improvement for later is OpenAPI query-parameter documentation quality. The endpoints work and are generated, but explicit query metadata remains known technical debt.
+
+#### Refactoring
+
+The shared `reportRange` helper is justified because all report endpoints use the same `from`/`to` RFC3339 half-open range. No broader abstraction is needed.
+
+#### Interview Review
+
+You should now be able to explain CQRS read models, why reports can join across slices, why half-open time ranges avoid boundary bugs, how `GROUP BY` aggregation works, why deterministic ordering matters and what trade-offs indexes introduce.
+
+#### Completion Criteria
+
+- Daily production report implemented.
+- Employee productivity report implemented.
+- Product statistics report implemented.
+- Reporting endpoints require bearer authentication and management RBAC.
+- Reporting SQL is generated through sqlc.
+- Reporting integration tests verify query correctness.
+- Reporting performance has a first targeted index.
+- Tests, build, lint and sqlc generation pass.
+- Roadmap updated.
+
 ### Goal
 
 Provide useful business reports.
@@ -4364,7 +4492,15 @@ Managers can monitor production without Excel.
 
 Status
 
-⬜ Not Started
+🚧 In Progress
+
+### Lessons
+
+- **L9.1** — CSV Import Design & Streaming Reader
+- **L9.2** — Row Validation & Error Collection
+- **L9.3** — Batch Persistence & Transaction Strategy
+- **L9.4** — Import Summary API & Partial Failure Reporting
+- **L9.5** — CSV Import Review & Performance
 
 ### Goal
 

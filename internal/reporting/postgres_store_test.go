@@ -168,6 +168,26 @@ func TestPostgresStore_ProductStatisticsInvalidRange(t *testing.T) {
 	}
 }
 
+func TestReportingIndexExists(t *testing.T) {
+	_, pool := testPostgresStore(t)
+
+	var exists bool
+	if err := pool.QueryRow(t.Context(), `
+		SELECT EXISTS (
+			SELECT 1
+			FROM pg_indexes
+			WHERE schemaname = 'public'
+			  AND tablename = 'production_entries'
+			  AND indexname = 'production_entries_reporting_idx'
+		)
+	`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("production_entries_reporting_idx does not exist")
+	}
+}
+
 func cleanReportingTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	for _, query := range []string{
