@@ -60,3 +60,57 @@ func (q *Queries) DailyProduction(ctx context.Context, arg DailyProductionParams
 	}
 	return items, nil
 }
+
+const employeeProductivity = `-- name: EmployeeProductivity :many
+SELECT
+    pe.employee_id,
+    e.first_name,
+    e.last_name,
+    sum(pe.quantity)::bigint AS total_quantity,
+    count(*)::bigint AS entry_count
+FROM production_entries pe
+JOIN employees e ON e.id = pe.employee_id
+WHERE pe.occurred_at >= $1
+  AND pe.occurred_at < $2
+GROUP BY pe.employee_id, e.first_name, e.last_name
+ORDER BY total_quantity DESC, entry_count DESC, pe.employee_id ASC
+`
+
+type EmployeeProductivityParams struct {
+	FromTime pgtype.Timestamptz `json:"from_time"`
+	ToTime   pgtype.Timestamptz `json:"to_time"`
+}
+
+type EmployeeProductivityRow struct {
+	EmployeeID    string `json:"employee_id"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	TotalQuantity int64  `json:"total_quantity"`
+	EntryCount    int64  `json:"entry_count"`
+}
+
+func (q *Queries) EmployeeProductivity(ctx context.Context, arg EmployeeProductivityParams) ([]EmployeeProductivityRow, error) {
+	rows, err := q.db.Query(ctx, employeeProductivity, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmployeeProductivityRow{}
+	for rows.Next() {
+		var i EmployeeProductivityRow
+		if err := rows.Scan(
+			&i.EmployeeID,
+			&i.FirstName,
+			&i.LastName,
+			&i.TotalQuantity,
+			&i.EntryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

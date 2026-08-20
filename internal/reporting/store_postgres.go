@@ -50,3 +50,34 @@ func (s *PostgresStore) DailyProduction(ctx context.Context, from, to time.Time)
 
 	return result, nil
 }
+
+// EmployeeProductivity returns production quantities grouped by employee.
+func (s *PostgresStore) EmployeeProductivity(ctx context.Context, from, to time.Time) ([]EmployeeProductivityRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.EmployeeProductivity(ctx, reportingdb.EmployeeProductivityParams{
+		FromTime: pgtype.Timestamptz{Time: from.UTC(), Valid: true},
+		ToTime:   pgtype.Timestamptz{Time: to.UTC(), Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]EmployeeProductivityRow, 0, len(rows))
+	for _, row := range rows {
+		if row.TotalQuantity > math.MaxInt || row.EntryCount > math.MaxInt {
+			return nil, fmt.Errorf("report aggregate exceeds int size: %w", ErrInvalidRange)
+		}
+		result = append(result, EmployeeProductivityRow{
+			EmployeeID:    row.EmployeeID,
+			FirstName:     row.FirstName,
+			LastName:      row.LastName,
+			TotalQuantity: int(row.TotalQuantity),
+			EntryCount:    int(row.EntryCount),
+		})
+	}
+
+	return result, nil
+}

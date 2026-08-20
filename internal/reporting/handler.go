@@ -31,13 +31,23 @@ type DailyProductionRowResponse struct {
 	EntryCount    int       `json:"entryCount"`
 }
 
+// EmployeeProductivityResponse is the JSON response for the employee productivity report.
+type EmployeeProductivityResponse struct {
+	Rows []EmployeeProductivityRowResponse `json:"rows"`
+}
+
+// EmployeeProductivityRowResponse is one row in the employee productivity report response.
+type EmployeeProductivityRowResponse struct {
+	EmployeeID    string `json:"employeeId"`
+	FirstName     string `json:"firstName"`
+	LastName      string `json:"lastName"`
+	TotalQuantity int    `json:"totalQuantity"`
+	EntryCount    int    `json:"entryCount"`
+}
+
 // DailyProduction handles GET /reports/daily-production.
 func (h *Handler) DailyProduction(c fuego.ContextNoBody) (DailyProductionResponse, error) {
-	from, err := parseReportTime(c.QueryParam("from"), "from")
-	if err != nil {
-		return DailyProductionResponse{}, invalidRangeError(err)
-	}
-	to, err := parseReportTime(c.QueryParam("to"), "to")
+	from, to, err := reportRange(c)
 	if err != nil {
 		return DailyProductionResponse{}, invalidRangeError(err)
 	}
@@ -51,6 +61,36 @@ func (h *Handler) DailyProduction(c fuego.ContextNoBody) (DailyProductionRespons
 	}
 
 	return DailyProductionResponse{Rows: dailyProductionRowsResponse(rows)}, nil
+}
+
+// EmployeeProductivity handles GET /reports/employee-productivity.
+func (h *Handler) EmployeeProductivity(c fuego.ContextNoBody) (EmployeeProductivityResponse, error) {
+	from, to, err := reportRange(c)
+	if err != nil {
+		return EmployeeProductivityResponse{}, invalidRangeError(err)
+	}
+
+	rows, err := h.store.EmployeeProductivity(c.Context(), from, to)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRange) {
+			return EmployeeProductivityResponse{}, invalidRangeError(err)
+		}
+		return EmployeeProductivityResponse{}, err
+	}
+
+	return EmployeeProductivityResponse{Rows: employeeProductivityRowsResponse(rows)}, nil
+}
+
+func reportRange(c fuego.ContextNoBody) (time.Time, time.Time, error) {
+	from, err := parseReportTime(c.QueryParam("from"), "from")
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	to, err := parseReportTime(c.QueryParam("to"), "to")
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return from, to, nil
 }
 
 func parseReportTime(raw, name string) (time.Time, error) {
@@ -73,6 +113,14 @@ func dailyProductionRowsResponse(rows []DailyProductionRow) []DailyProductionRow
 			TotalQuantity: row.TotalQuantity,
 			EntryCount:    row.EntryCount,
 		})
+	}
+	return response
+}
+
+func employeeProductivityRowsResponse(rows []EmployeeProductivityRow) []EmployeeProductivityRowResponse {
+	response := make([]EmployeeProductivityRowResponse, 0, len(rows))
+	for _, row := range rows {
+		response = append(response, EmployeeProductivityRowResponse(row))
 	}
 	return response
 }

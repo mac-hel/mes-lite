@@ -13,12 +13,22 @@ var ErrInvalidRange = errors.New("invalid report range")
 // Store reads reporting data. It intentionally exposes read models, not domain aggregates.
 type Store interface {
 	DailyProduction(ctx context.Context, from, to time.Time) ([]DailyProductionRow, error)
+	EmployeeProductivity(ctx context.Context, from, to time.Time) ([]EmployeeProductivityRow, error)
 }
 
 // DailyProductionRow is a read model for production totals grouped by UTC day and product.
 type DailyProductionRow struct {
 	Day           time.Time
 	ProductSKU    string
+	TotalQuantity int
+	EntryCount    int
+}
+
+// EmployeeProductivityRow is a read model for production totals grouped by employee.
+type EmployeeProductivityRow struct {
+	EmployeeID    string
+	FirstName     string
+	LastName      string
 	TotalQuantity int
 	EntryCount    int
 }
