@@ -50,3 +50,13 @@ sql:
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_empty_slices: true
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/reporting/queries"
+    gen:
+      go:
+        package: "reportingdb"
+        out: "internal/reporting/reportingdb"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_empty_slices: true
