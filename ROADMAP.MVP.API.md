@@ -37,7 +37,7 @@ This section must always reflect the current progress.
 - Milestone 6
 - Milestone 7
 - Milestone 8
-**Next milestone:** 10 - Background Jobs & Concurrency
+**Next milestone:** 10 - MVP API Completion
 **Current branch:** main
 **Architecture maturity:** 7.7 / 10
 **Go knowledge progress:** 62%
@@ -644,7 +644,7 @@ Registers completed work.
 
 ### Team Leader
 
-Monitors current production.
+Reviews recently entered production records.
 
 Reviews completed work.
 
@@ -654,13 +654,13 @@ Corrects mistakes.
 
 ### Production Manager
 
-Creates production orders.
+Creates or maintains the minimum production-order data needed for registration.
 
-Tracks progress.
+Reviews production records.
 
-Generates reports.
+Generates reports that replace existing Excel or paper summaries.
 
-Measures productivity.
+Reviews productivity summaries where they are already tracked manually.
 
 ---
 
@@ -676,33 +676,35 @@ Configures the system.
 
 ## MVP Scope
 
-The first version supports:
+The first version is scoped as an Excel/paper replacement. It supports only the capabilities needed to replace current manual production tracking:
 
 - employees
 - products
-- production entries
-- production orders
+- production entries with a workstation text field
+- minimum production-order data needed for registration
 - authentication
-- reporting
-- CSV import
+- reports that replace existing Excel or paper summaries
+- CSV import for historical manual data
+- manager/leader review of entered production records
+- correction of production-entry mistakes without silently editing history
 
-Everything else is intentionally postponed.
+Everything beyond replacing current manual tracking is intentionally postponed to MVP-V2 or later.
 
 ---
 
 ## Future Scope
 
-Later milestones may introduce:
+MVP-V2 or later milestones may introduce:
 
 - machines
-- workstations
+- formal workstation management
 - warehouse
 - traceability
 - quality control
 - notifications
 - scheduling
 - dashboards
-- background jobs
+- formal background jobs
 - integrations
 - analytics
 
@@ -3903,7 +3905,7 @@ Introduce reporting as a read-model/query slice before adding HTTP endpoints.
 
 #### Business Context
 
-Managers need production totals without manually filtering Excel sheets. Reporting reads existing operational data and summarizes it for decisions rather than changing business state.
+Managers need production totals without manually filtering Excel sheets. Reporting reads existing operational data and produces the summaries that were previously maintained manually.
 
 #### Problem
 
@@ -4095,7 +4097,7 @@ Add an employee productivity report that ranks employees by completed production
 
 #### Business Context
 
-Production managers and team leaders need to understand employee output without manually joining production entries to employee master data. The report should answer who produced how much during a period.
+Production managers and team leaders need to replace manually prepared employee-output summaries where those summaries are already tracked. The report should answer who produced how much during a period.
 
 #### Problem
 
@@ -4196,7 +4198,7 @@ Add product-level statistics reporting for completed production over a requested
 
 #### Business Context
 
-Production managers need to know which products were produced most often, how much quantity was completed and how broadly employees contributed to each product.
+Production managers need product-level production summaries without manually aggregating production entries from Excel.
 
 #### Problem
 
@@ -4424,7 +4426,7 @@ Add detailed breakdown reports that preserve the existing summary endpoints whil
 
 #### Business Context
 
-Managers need both summary and detail. A daily product total answers what was produced each day, but not who produced each product. Employee productivity answers total output per employee, but not which products each employee produced.
+Managers need both summary and detail when those details are already tracked manually. A daily product total answers what was produced each day, but not who produced each product. Employee productivity answers total output per employee, but not which products each employee produced.
 
 #### Problem
 
@@ -4491,7 +4493,7 @@ The existing summary reports remain unchanged.
 
 #### Business Context
 
-MES Lite now has detailed product-by-employee reporting without changing the existing summary reports.
+MES Lite now has detailed product-by-employee reporting for manual-summary replacement without changing the existing summary reports.
 
 #### Problem
 
@@ -4561,19 +4563,18 @@ An experienced Go engineer would approve adding separate endpoints because aggre
 
 ### Goal
 
-Provide useful business reports.
+Provide reports that replace existing Excel or paper summaries.
 
 ### Business Value
 
-Managers can monitor production without Excel.
+Managers can review production summaries without maintaining Excel reports manually.
 
 ### Features
 
 - daily production
-- employee productivity
-- product statistics
+- employee productivity where manually tracked
+- product statistics where manually tracked
 - filtering
-- exports
 
 ### Go Concepts
 
@@ -4624,7 +4625,7 @@ Managers can monitor production without Excel.
 
 ### Definition of Done
 
-- reports complete
+- manual-summary reports complete
 - SQL optimized
 - tests passing
 
@@ -4717,7 +4718,7 @@ The company can migrate historical production data.
 
 ## Milestone Review (Milestones 0-9)
 
-At this point the application should already be usable by a small company.
+At this point the application should have most backend/API foundations for a small-company Excel/paper replacement. Milestone 10 closes the remaining MVP API gaps before post-MVP learning milestones begin.
 
 The following concepts should now be understood.
 
@@ -4799,11 +4800,83 @@ The user should be able to answer questions such as:
 - When would you choose a pointer receiver?
 - How would you structure a production Go service?
 
-If significant gaps are found, they should be addressed before moving to Milestones 10–14.
+If significant gaps are found, they should be addressed before moving to post-MVP learning milestones 11-15.
 
 ---
 
-## Milestone 10 - Background Jobs & Concurrency
+## Milestone 10 - MVP API Completion
+
+Status
+
+⬜ Not Started
+
+### Goal
+
+Close the remaining API gaps for the Excel/paper-replacement MVP without expanding into full MES scope.
+
+### Business Value
+
+Managers and leaders can review entered production records, correct mistakes with auditability and trust production registration even when clients retry requests.
+
+### Lessons
+
+- **L10.1** — Production Entry Review API
+- **L10.2** — Production Registration Idempotency
+- **L10.3** — Production Entry Corrections & Audit Trail
+- **L10.4** — MVP API Review
+
+### Features
+
+- list/review production entries for managers and leaders
+- filters matching current manual review needs
+- explicit workstation as a production-entry text field
+- idempotency key or request ID for production registration
+- append-only correction records for production-entry mistakes
+- correction reason and actor tracking
+
+### Non-Goals
+
+- formal workstation management
+- dashboards
+- offline-first client behavior
+- machine integration
+- generic audit framework
+- broad production-event refactor beyond the correction/idempotency needs of the current production-entry model
+
+### Go Concepts
+
+- idempotent command handling
+- unique constraints as application guardrails
+- DTOs for review and correction workflows
+- domain errors for duplicate request IDs and invalid corrections
+
+### Architecture Concepts
+
+- append-only corrections instead of silent edits
+- auditability for production history
+- command idempotency at HTTP/API boundaries
+- minimal MVP completion before post-MVP learning milestones
+
+### Testing
+
+- production-entry list integration tests
+- authorization tests for manager/leader review
+- duplicate request-ID tests
+- correction audit tests
+- worker-forbidden correction tests
+
+### Definition of Done
+
+- managers/leaders can list and review entered production records
+- production registration accepts and enforces an idempotency key or request ID
+- permitted users can correct production-entry mistakes without overwriting original records
+- normal workers cannot correct historical records
+- workstation remains a simple production-entry text field for MVP
+- tests passing
+
+---
+
+## Milestone 11 - Background Jobs & Concurrency
 
 Status
 
@@ -4819,7 +4892,7 @@ Concurrency is one of Go's defining features and should be understood deeply.
 
 Long-running tasks should not block HTTP requests.
 
-Examples:
+Post-MVP examples:
 
 - CSV imports
 - report generation
@@ -4888,7 +4961,7 @@ Examples:
 
 ---
 
-## Milestone 11 - Machine Integration & Synchronization
+## Milestone 12 - Machine Integration & Synchronization
 
 Status
 
@@ -4900,7 +4973,7 @@ Safely process concurrent events coming from production machines.
 
 ### Business Value
 
-Prepare the system for future CNC and production machine integration.
+Prepare the system for future CNC and production machine integration after the Excel/paper replacement is proven useful.
 
 ### Features
 
@@ -4960,7 +5033,7 @@ Prepare the system for future CNC and production machine integration.
 
 ---
 
-## Milestone 12 - Observability
+## Milestone 13 - Observability
 
 Status
 
@@ -5031,7 +5104,7 @@ Operators can understand system health and diagnose problems quickly.
 
 ---
 
-## Milestone 13 - Performance Engineering
+## Milestone 14 - Performance Engineering
 
 Status
 
@@ -5104,7 +5177,7 @@ The application remains responsive as usage grows.
 
 ---
 
-## Milestone 14 - Production Readiness
+## Milestone 15 - Production Readiness
 
 Status
 

@@ -26,14 +26,16 @@ Shouldn't it also provide number of units manufactured by employee?
 *Daily Employee Production* - daily, How much of each product did each employee made?
 *Employee Productivity for Products* - during period, How much of each product did each employee made?
 
-## Each package builds all sqlc queries
+## <REJECTED> Each package builds all sqlc queries
 Currently each package (slice) builds all sqlc queries across all packages.
 Isn't this approach:
 - confusing for developers
 - crossing package boundaries
 Shouldn't each package build only own `sqlc` queries and create only own query models?
+see `docs/sqlc-boundaries.md`
 
-
-## Double id - UUID for user-facing, int for internal reference
+## <REJECTED> Double id - UUID for user-facing, int for internal reference
+What do you think about using UUID and int ID simultaneously? UUID for user-facing things, int for internal references (for speed).
+ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical identifier per entity. If performance becomes real later, benchmark and revisit with data.
 
 ## Sanity tests?
