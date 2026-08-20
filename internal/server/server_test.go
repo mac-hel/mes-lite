@@ -76,6 +76,25 @@ func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenMan
 			EntryCount:    1,
 			EmployeeCount: 1,
 		}},
+		[]reporting.DailyEmployeeProductionRow{{
+			Day:           mustTime(t, "2026-08-18T00:00:00Z"),
+			ProductSKU:    "sku-1",
+			ProductName:   "Ventilation Unit",
+			EmployeeID:    "emp-1",
+			FirstName:     "Ana",
+			LastName:      "Worker",
+			TotalQuantity: 12,
+			EntryCount:    1,
+		}},
+		[]reporting.EmployeeProductivityProductRow{{
+			EmployeeID:    "emp-1",
+			FirstName:     "Ana",
+			LastName:      "Worker",
+			ProductSKU:    "sku-1",
+			ProductName:   "Ventilation Unit",
+			TotalQuantity: 12,
+			EntryCount:    1,
+		}},
 	)
 
 	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService), orders.NewHandler(ordersService), reporting.NewHandler(reportingStore)
@@ -408,6 +427,58 @@ func TestProductStatisticsReportRejectsWorkerRole(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
 	req := httptest.NewRequest(http.MethodGet, "/reports/product-statistics?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestDailyEmployeeProductionReportAllowsLeaderRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/reports/daily-employee-production?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestDailyEmployeeProductionReportRejectsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/reports/daily-employee-production?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEmployeeProductivityProductsReportAllowsManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/reports/employee-productivity/products?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEmployeeProductivityProductsReportRejectsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/reports/employee-productivity/products?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
 	setAuthorization(t, req, tokens, auth.RoleWorker)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)

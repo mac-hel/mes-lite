@@ -112,3 +112,70 @@ func (s *PostgresStore) ProductStatistics(ctx context.Context, from, to time.Tim
 
 	return result, nil
 }
+
+// DailyEmployeeProduction returns daily production quantities grouped by product and employee.
+func (s *PostgresStore) DailyEmployeeProduction(ctx context.Context, from, to time.Time) ([]DailyEmployeeProductionRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.DailyEmployeeProduction(ctx, reportingdb.DailyEmployeeProductionParams{
+		FromTime: pgtype.Timestamptz{Time: from.UTC(), Valid: true},
+		ToTime:   pgtype.Timestamptz{Time: to.UTC(), Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]DailyEmployeeProductionRow, 0, len(rows))
+	for _, row := range rows {
+		if row.TotalQuantity > math.MaxInt || row.EntryCount > math.MaxInt {
+			return nil, fmt.Errorf("report aggregate exceeds int size: %w", ErrInvalidRange)
+		}
+		result = append(result, DailyEmployeeProductionRow{
+			Day:           row.Day.Time.UTC(),
+			ProductSKU:    row.ProductSku,
+			ProductName:   row.ProductName,
+			EmployeeID:    row.EmployeeID,
+			FirstName:     row.FirstName,
+			LastName:      row.LastName,
+			TotalQuantity: int(row.TotalQuantity),
+			EntryCount:    int(row.EntryCount),
+		})
+	}
+
+	return result, nil
+}
+
+// EmployeeProductivityProducts returns employee productivity grouped by product.
+func (s *PostgresStore) EmployeeProductivityProducts(ctx context.Context, from, to time.Time) ([]EmployeeProductivityProductRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.EmployeeProductivityProducts(ctx, reportingdb.EmployeeProductivityProductsParams{
+		FromTime: pgtype.Timestamptz{Time: from.UTC(), Valid: true},
+		ToTime:   pgtype.Timestamptz{Time: to.UTC(), Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]EmployeeProductivityProductRow, 0, len(rows))
+	for _, row := range rows {
+		if row.TotalQuantity > math.MaxInt || row.EntryCount > math.MaxInt {
+			return nil, fmt.Errorf("report aggregate exceeds int size: %w", ErrInvalidRange)
+		}
+		result = append(result, EmployeeProductivityProductRow{
+			EmployeeID:    row.EmployeeID,
+			FirstName:     row.FirstName,
+			LastName:      row.LastName,
+			ProductSKU:    row.ProductSku,
+			ProductName:   row.ProductName,
+			TotalQuantity: int(row.TotalQuantity),
+			EntryCount:    int(row.EntryCount),
+		})
+	}
+
+	return result, nil
+}

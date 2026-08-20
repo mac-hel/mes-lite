@@ -59,7 +59,42 @@ type ProductStatisticsRowResponse struct {
 	EmployeeCount int    `json:"employeeCount"`
 }
 
+// DailyEmployeeProductionResponse is the JSON response for the daily employee production report.
+type DailyEmployeeProductionResponse struct {
+	Rows []DailyEmployeeProductionRowResponse `json:"rows"`
+}
+
+// DailyEmployeeProductionRowResponse is one row in the daily employee production report response.
+type DailyEmployeeProductionRowResponse struct {
+	Day           time.Time `json:"day"`
+	ProductSKU    string    `json:"productSku"`
+	ProductName   string    `json:"productName"`
+	EmployeeID    string    `json:"employeeId"`
+	FirstName     string    `json:"firstName"`
+	LastName      string    `json:"lastName"`
+	TotalQuantity int       `json:"totalQuantity"`
+	EntryCount    int       `json:"entryCount"`
+}
+
+// EmployeeProductivityProductsResponse is the JSON response for employee productivity by product.
+type EmployeeProductivityProductsResponse struct {
+	Rows []EmployeeProductivityProductRowResponse `json:"rows"`
+}
+
+// EmployeeProductivityProductRowResponse is one row in the employee productivity by product response.
+type EmployeeProductivityProductRowResponse struct {
+	EmployeeID    string `json:"employeeId"`
+	FirstName     string `json:"firstName"`
+	LastName      string `json:"lastName"`
+	ProductSKU    string `json:"productSku"`
+	ProductName   string `json:"productName"`
+	TotalQuantity int    `json:"totalQuantity"`
+	EntryCount    int    `json:"entryCount"`
+}
+
 // DailyProduction handles GET /reports/daily-production.
+// Reports daily quantities for each Product (at given period).
+// Answers question: "How much of each product was made each day?".
 func (h *Handler) DailyProduction(c fuego.ContextNoBody) (DailyProductionResponse, error) {
 	from, to, err := reportRange(c)
 	if err != nil {
@@ -78,6 +113,8 @@ func (h *Handler) DailyProduction(c fuego.ContextNoBody) (DailyProductionRespons
 }
 
 // EmployeeProductivity handles GET /reports/employee-productivity.
+// Reports employee productivity for all products (at given period).
+// Answers question: "How much products did each employee made overall?".
 func (h *Handler) EmployeeProductivity(c fuego.ContextNoBody) (EmployeeProductivityResponse, error) {
 	from, to, err := reportRange(c)
 	if err != nil {
@@ -96,6 +133,8 @@ func (h *Handler) EmployeeProductivity(c fuego.ContextNoBody) (EmployeeProductiv
 }
 
 // ProductStatistics handles GET /reports/product-statistics.
+// Reports total quantities for each Product (at given period).
+// Answers question: "How much of each product was made?".
 func (h *Handler) ProductStatistics(c fuego.ContextNoBody) (ProductStatisticsResponse, error) {
 	from, to, err := reportRange(c)
 	if err != nil {
@@ -111,6 +150,46 @@ func (h *Handler) ProductStatistics(c fuego.ContextNoBody) (ProductStatisticsRes
 	}
 
 	return ProductStatisticsResponse{Rows: productStatisticsRowsResponse(rows)}, nil
+}
+
+// DailyEmployeeProduction handles GET /reports/daily-employee-production.
+// Reports daily quantities for each product and employee (at given period).
+// Answers question: "Who produced how much of each product each day?".
+func (h *Handler) DailyEmployeeProduction(c fuego.ContextNoBody) (DailyEmployeeProductionResponse, error) {
+	from, to, err := reportRange(c)
+	if err != nil {
+		return DailyEmployeeProductionResponse{}, invalidRangeError(err)
+	}
+
+	rows, err := h.store.DailyEmployeeProduction(c.Context(), from, to)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRange) {
+			return DailyEmployeeProductionResponse{}, invalidRangeError(err)
+		}
+		return DailyEmployeeProductionResponse{}, err
+	}
+
+	return DailyEmployeeProductionResponse{Rows: dailyEmployeeProductionRowsResponse(rows)}, nil
+}
+
+// EmployeeProductivityProducts handles GET /reports/employee-productivity/products.
+// Reports employee productivity broken down by product (at given period).
+// Answers question: "Which products did each employee produce?".
+func (h *Handler) EmployeeProductivityProducts(c fuego.ContextNoBody) (EmployeeProductivityProductsResponse, error) {
+	from, to, err := reportRange(c)
+	if err != nil {
+		return EmployeeProductivityProductsResponse{}, invalidRangeError(err)
+	}
+
+	rows, err := h.store.EmployeeProductivityProducts(c.Context(), from, to)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRange) {
+			return EmployeeProductivityProductsResponse{}, invalidRangeError(err)
+		}
+		return EmployeeProductivityProductsResponse{}, err
+	}
+
+	return EmployeeProductivityProductsResponse{Rows: employeeProductivityProductRowsResponse(rows)}, nil
 }
 
 func reportRange(c fuego.ContextNoBody) (time.Time, time.Time, error) {
@@ -161,6 +240,31 @@ func productStatisticsRowsResponse(rows []ProductStatisticsRow) []ProductStatist
 	response := make([]ProductStatisticsRowResponse, 0, len(rows))
 	for _, row := range rows {
 		response = append(response, ProductStatisticsRowResponse(row))
+	}
+	return response
+}
+
+func dailyEmployeeProductionRowsResponse(rows []DailyEmployeeProductionRow) []DailyEmployeeProductionRowResponse {
+	response := make([]DailyEmployeeProductionRowResponse, 0, len(rows))
+	for _, row := range rows {
+		response = append(response, DailyEmployeeProductionRowResponse{
+			Day:           row.Day.UTC(),
+			ProductSKU:    row.ProductSKU,
+			ProductName:   row.ProductName,
+			EmployeeID:    row.EmployeeID,
+			FirstName:     row.FirstName,
+			LastName:      row.LastName,
+			TotalQuantity: row.TotalQuantity,
+			EntryCount:    row.EntryCount,
+		})
+	}
+	return response
+}
+
+func employeeProductivityProductRowsResponse(rows []EmployeeProductivityProductRow) []EmployeeProductivityProductRowResponse {
+	response := make([]EmployeeProductivityProductRowResponse, 0, len(rows))
+	for _, row := range rows {
+		response = append(response, EmployeeProductivityProductRowResponse(row))
 	}
 	return response
 }

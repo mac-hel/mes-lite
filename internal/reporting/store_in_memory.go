@@ -18,14 +18,18 @@ type InMemoryStore struct {
 	dailyProductionRows      []DailyProductionRow
 	employeeProductivityRows []EmployeeProductivityRow
 	productStatisticsRows    []ProductStatisticsRow
+	dailyEmployeeRows        []DailyEmployeeProductionRow
+	employeeProductRows      []EmployeeProductivityProductRow
 }
 
 // NewInMemoryStoreWithReports creates an in-memory store with all supported report rows.
-func NewInMemoryStoreWithReports(dailyRows []DailyProductionRow, employeeRows []EmployeeProductivityRow, productRows []ProductStatisticsRow) *InMemoryStore {
+func NewInMemoryStoreWithReports(dailyRows []DailyProductionRow, employeeRows []EmployeeProductivityRow, productRows []ProductStatisticsRow, dailyEmployeeRows []DailyEmployeeProductionRow, employeeProductRows []EmployeeProductivityProductRow) *InMemoryStore {
 	return &InMemoryStore{
 		dailyProductionRows:      append([]DailyProductionRow(nil), dailyRows...),
 		employeeProductivityRows: append([]EmployeeProductivityRow(nil), employeeRows...),
 		productStatisticsRows:    append([]ProductStatisticsRow(nil), productRows...),
+		dailyEmployeeRows:        append([]DailyEmployeeProductionRow(nil), dailyEmployeeRows...),
+		employeeProductRows:      append([]EmployeeProductivityProductRow(nil), employeeProductRows...),
 	}
 }
 
@@ -74,4 +78,28 @@ func (s *InMemoryStore) ProductStatistics(_ context.Context, from, to time.Time)
 	defer s.mu.RUnlock()
 
 	return append([]ProductStatisticsRow(nil), s.productStatisticsRows...), nil
+}
+
+// DailyEmployeeProduction returns stored daily employee production rows for a valid range.
+func (s *InMemoryStore) DailyEmployeeProduction(_ context.Context, from, to time.Time) ([]DailyEmployeeProductionRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return append([]DailyEmployeeProductionRow(nil), s.dailyEmployeeRows...), nil
+}
+
+// EmployeeProductivityProducts returns stored employee product productivity rows for a valid range.
+func (s *InMemoryStore) EmployeeProductivityProducts(_ context.Context, from, to time.Time) ([]EmployeeProductivityProductRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return append([]EmployeeProductivityProductRow(nil), s.employeeProductRows...), nil
 }

@@ -13,8 +13,26 @@ What do you think about using collections as types of fields that contain multip
 - <DONE> `Order.lines` (currently `[]OrderLine`, could be collection)
 - <REJECTED FOR NOW> `Order.assignedEmployees` (currently `[]string`, could be collection)
 
+## <ADDED> (as separate reports) Daily Production Report lacks num of products made by employee
+Currently Daily Production Report provides:
+- total number of manufactured units for product
+- number of production entries for product
+Shouldn't it also provide number of units manufactured by employee?
+**Reports**
+*Daily Production*      - daily, How much of each product was made?
+*Employee Productivity* - during period, How much products did each employee made overall?
+*Product Statistics*    - during period, How much of each product was made?
+**Added:**
+*Daily Employee Production* - daily, How much of each product did each employee made?
+*Employee Productivity for Products* - during period, How much of each product did each employee made?
+
 ## Each package builds all sqlc queries
-Should each package build only own `sqlc` queries and create only own query models?
+Currently each package (slice) builds all sqlc queries across all packages.
+Isn't this approach:
+- confusing for developers
+- crossing package boundaries
+Shouldn't each package build only own `sqlc` queries and create only own query models?
+
 
 ## Double id - UUID for user-facing, int for internal reference
 

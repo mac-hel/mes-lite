@@ -11,6 +11,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const dailyEmployeeProduction = `-- name: DailyEmployeeProduction :many
+SELECT
+    date_trunc('day', pe.occurred_at AT TIME ZONE 'UTC')::timestamptz AS day,
+    pe.product_sku,
+    p.name AS product_name,
+    pe.employee_id,
+    e.first_name,
+    e.last_name,
+    sum(pe.quantity)::bigint AS total_quantity,
+    count(*)::bigint AS entry_count
+FROM production_entries pe
+JOIN products p ON p.sku = pe.product_sku
+JOIN employees e ON e.id = pe.employee_id
+WHERE pe.occurred_at >= $1
+  AND pe.occurred_at < $2
+GROUP BY day, pe.product_sku, p.name, pe.employee_id, e.first_name, e.last_name
+ORDER BY day ASC, pe.product_sku ASC, pe.employee_id ASC
+`
+
+type DailyEmployeeProductionParams struct {
+	FromTime pgtype.Timestamptz `json:"from_time"`
+	ToTime   pgtype.Timestamptz `json:"to_time"`
+}
+
+type DailyEmployeeProductionRow struct {
+	Day           pgtype.Timestamptz `json:"day"`
+	ProductSku    string             `json:"product_sku"`
+	ProductName   string             `json:"product_name"`
+	EmployeeID    string             `json:"employee_id"`
+	FirstName     string             `json:"first_name"`
+	LastName      string             `json:"last_name"`
+	TotalQuantity int64              `json:"total_quantity"`
+	EntryCount    int64              `json:"entry_count"`
+}
+
+func (q *Queries) DailyEmployeeProduction(ctx context.Context, arg DailyEmployeeProductionParams) ([]DailyEmployeeProductionRow, error) {
+	rows, err := q.db.Query(ctx, dailyEmployeeProduction, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DailyEmployeeProductionRow{}
+	for rows.Next() {
+		var i DailyEmployeeProductionRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.ProductSku,
+			&i.ProductName,
+			&i.EmployeeID,
+			&i.FirstName,
+			&i.LastName,
+			&i.TotalQuantity,
+			&i.EntryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dailyProduction = `-- name: DailyProduction :many
 SELECT
     date_trunc('day', occurred_at AT TIME ZONE 'UTC')::timestamptz AS day,
@@ -102,6 +166,67 @@ func (q *Queries) EmployeeProductivity(ctx context.Context, arg EmployeeProducti
 			&i.EmployeeID,
 			&i.FirstName,
 			&i.LastName,
+			&i.TotalQuantity,
+			&i.EntryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const employeeProductivityProducts = `-- name: EmployeeProductivityProducts :many
+SELECT
+    pe.employee_id,
+    e.first_name,
+    e.last_name,
+    pe.product_sku,
+    p.name AS product_name,
+    sum(pe.quantity)::bigint AS total_quantity,
+    count(*)::bigint AS entry_count
+FROM production_entries pe
+JOIN employees e ON e.id = pe.employee_id
+JOIN products p ON p.sku = pe.product_sku
+WHERE pe.occurred_at >= $1
+  AND pe.occurred_at < $2
+GROUP BY pe.employee_id, e.first_name, e.last_name, pe.product_sku, p.name
+ORDER BY pe.employee_id ASC, total_quantity DESC, entry_count DESC, pe.product_sku ASC
+`
+
+type EmployeeProductivityProductsParams struct {
+	FromTime pgtype.Timestamptz `json:"from_time"`
+	ToTime   pgtype.Timestamptz `json:"to_time"`
+}
+
+type EmployeeProductivityProductsRow struct {
+	EmployeeID    string `json:"employee_id"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	ProductSku    string `json:"product_sku"`
+	ProductName   string `json:"product_name"`
+	TotalQuantity int64  `json:"total_quantity"`
+	EntryCount    int64  `json:"entry_count"`
+}
+
+func (q *Queries) EmployeeProductivityProducts(ctx context.Context, arg EmployeeProductivityProductsParams) ([]EmployeeProductivityProductsRow, error) {
+	rows, err := q.db.Query(ctx, employeeProductivityProducts, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmployeeProductivityProductsRow{}
+	for rows.Next() {
+		var i EmployeeProductivityProductsRow
+		if err := rows.Scan(
+			&i.EmployeeID,
+			&i.FirstName,
+			&i.LastName,
+			&i.ProductSku,
+			&i.ProductName,
 			&i.TotalQuantity,
 			&i.EntryCount,
 		); err != nil {

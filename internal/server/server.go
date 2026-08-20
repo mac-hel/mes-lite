@@ -79,7 +79,9 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	fuego.Put(s, "/production-orders/{id}/cancel", ordersHandler.Cancel, progressOrders)
 
 	fuego.Get(s, "/reports/daily-production", reportingHandler.DailyProduction, readReports)
+	fuego.Get(s, "/reports/daily-employee-production", reportingHandler.DailyEmployeeProduction, readReports)
 	fuego.Get(s, "/reports/employee-productivity", reportingHandler.EmployeeProductivity, readReports)
+	fuego.Get(s, "/reports/employee-productivity/products", reportingHandler.EmployeeProductivityProducts, readReports)
 	fuego.Get(s, "/reports/product-statistics", reportingHandler.ProductStatistics, readReports)
 
 	return &Server{Server: s, cfg: cfg}

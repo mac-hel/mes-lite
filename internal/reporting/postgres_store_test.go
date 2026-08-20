@@ -168,6 +168,75 @@ func TestPostgresStore_ProductStatisticsInvalidRange(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_DailyEmployeeProduction(t *testing.T) {
+	store, pool := testPostgresStore(t)
+	ctx := t.Context()
+	from := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000031", "emp-1", "shaft-1", 3, from.Add(time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000032", "emp-1", "shaft-1", 4, from.Add(2*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000033", "emp-2", "shaft-1", 5, from.Add(3*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000034", "emp-1", "filter-1", 9, to.Add(time.Hour))
+
+	got, err := store.DailyEmployeeProduction(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []DailyEmployeeProductionRow{
+		{Day: from, ProductSKU: "shaft-1", ProductName: "Shaft", EmployeeID: "emp-1", FirstName: "Ana", LastName: "Worker", TotalQuantity: 7, EntryCount: 2},
+		{Day: from, ProductSKU: "shaft-1", ProductName: "Shaft", EmployeeID: "emp-2", FirstName: "Ben", LastName: "Worker", TotalQuantity: 5, EntryCount: 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(DailyEmployeeProduction()) = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("DailyEmployeeProduction()[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPostgresStore_EmployeeProductivityProducts(t *testing.T) {
+	store, pool := testPostgresStore(t)
+	ctx := t.Context()
+	from := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000041", "emp-1", "shaft-1", 3, from.Add(time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000042", "emp-1", "shaft-1", 4, from.Add(2*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000043", "emp-1", "filter-1", 5, from.Add(3*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000044", "emp-2", "filter-1", 9, to.Add(time.Hour))
+
+	got, err := store.EmployeeProductivityProducts(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []EmployeeProductivityProductRow{
+		{EmployeeID: "emp-1", FirstName: "Ana", LastName: "Worker", ProductSKU: "shaft-1", ProductName: "Shaft", TotalQuantity: 7, EntryCount: 2},
+		{EmployeeID: "emp-1", FirstName: "Ana", LastName: "Worker", ProductSKU: "filter-1", ProductName: "Filter", TotalQuantity: 5, EntryCount: 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(EmployeeProductivityProducts()) = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("EmployeeProductivityProducts()[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPostgresStore_DetailedReportsInvalidRange(t *testing.T) {
+	store, _ := testPostgresStore(t)
+	now := time.Now()
+	if _, err := store.DailyEmployeeProduction(t.Context(), now, now); !errors.Is(err, ErrInvalidRange) {
+		t.Fatalf("DailyEmployeeProduction() error = %v, want ErrInvalidRange", err)
+	}
+	if _, err := store.EmployeeProductivityProducts(t.Context(), now, now); !errors.Is(err, ErrInvalidRange) {
+		t.Fatalf("EmployeeProductivityProducts() error = %v, want ErrInvalidRange", err)
+	}
+}
+
 func TestReportingIndexExists(t *testing.T) {
 	_, pool := testPostgresStore(t)
 
