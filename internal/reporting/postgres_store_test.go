@@ -130,6 +130,44 @@ func TestPostgresStore_EmployeeProductivityInvalidRange(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_ProductStatistics(t *testing.T) {
+	store, pool := testPostgresStore(t)
+	ctx := t.Context()
+	from := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000021", "emp-1", "shaft-1", 3, from.Add(time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000022", "emp-2", "shaft-1", 4, from.Add(2*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000023", "emp-1", "filter-1", 5, from.Add(3*time.Hour))
+	insertReportingEntry(t, ctx, pool, "00000000-0000-4000-8000-000000000024", "emp-2", "filter-1", 9, to.Add(time.Hour))
+
+	got, err := store.ProductStatistics(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []ProductStatisticsRow{
+		{ProductSKU: "shaft-1", ProductName: "Shaft", TotalQuantity: 7, EntryCount: 2, EmployeeCount: 2},
+		{ProductSKU: "filter-1", ProductName: "Filter", TotalQuantity: 5, EntryCount: 1, EmployeeCount: 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(ProductStatistics()) = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ProductStatistics()[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPostgresStore_ProductStatisticsInvalidRange(t *testing.T) {
+	store, _ := testPostgresStore(t)
+	now := time.Now()
+	_, err := store.ProductStatistics(t.Context(), now, now)
+	if !errors.Is(err, ErrInvalidRange) {
+		t.Fatalf("ProductStatistics() error = %v, want ErrInvalidRange", err)
+	}
+}
+
 func cleanReportingTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	for _, query := range []string{

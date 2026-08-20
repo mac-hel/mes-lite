@@ -14,6 +14,7 @@ var ErrInvalidRange = errors.New("invalid report range")
 type Store interface {
 	DailyProduction(ctx context.Context, from, to time.Time) ([]DailyProductionRow, error)
 	EmployeeProductivity(ctx context.Context, from, to time.Time) ([]EmployeeProductivityRow, error)
+	ProductStatistics(ctx context.Context, from, to time.Time) ([]ProductStatisticsRow, error)
 }
 
 // DailyProductionRow is a read model for production totals grouped by UTC day and product.
@@ -31,6 +32,15 @@ type EmployeeProductivityRow struct {
 	LastName      string
 	TotalQuantity int
 	EntryCount    int
+}
+
+// ProductStatisticsRow is a read model for production totals grouped by product.
+type ProductStatisticsRow struct {
+	ProductSKU    string
+	ProductName   string
+	TotalQuantity int
+	EntryCount    int
+	EmployeeCount int
 }
 
 func validateRange(from, to time.Time) error {

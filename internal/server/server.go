@@ -80,6 +80,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 
 	fuego.Get(s, "/reports/daily-production", reportingHandler.DailyProduction, readReports)
 	fuego.Get(s, "/reports/employee-productivity", reportingHandler.EmployeeProductivity, readReports)
+	fuego.Get(s, "/reports/product-statistics", reportingHandler.ProductStatistics, readReports)
 
 	return &Server{Server: s, cfg: cfg}
 }

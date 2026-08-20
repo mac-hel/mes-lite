@@ -81,3 +81,34 @@ func (s *PostgresStore) EmployeeProductivity(ctx context.Context, from, to time.
 
 	return result, nil
 }
+
+// ProductStatistics returns production quantities grouped by product.
+func (s *PostgresStore) ProductStatistics(ctx context.Context, from, to time.Time) ([]ProductStatisticsRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.ProductStatistics(ctx, reportingdb.ProductStatisticsParams{
+		FromTime: pgtype.Timestamptz{Time: from.UTC(), Valid: true},
+		ToTime:   pgtype.Timestamptz{Time: to.UTC(), Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ProductStatisticsRow, 0, len(rows))
+	for _, row := range rows {
+		if row.TotalQuantity > math.MaxInt || row.EntryCount > math.MaxInt || row.EmployeeCount > math.MaxInt {
+			return nil, fmt.Errorf("report aggregate exceeds int size: %w", ErrInvalidRange)
+		}
+		result = append(result, ProductStatisticsRow{
+			ProductSKU:    row.ProductSku,
+			ProductName:   row.ProductName,
+			TotalQuantity: int(row.TotalQuantity),
+			EntryCount:    int(row.EntryCount),
+			EmployeeCount: int(row.EmployeeCount),
+		})
+	}
+
+	return result, nil
+}

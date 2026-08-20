@@ -45,6 +45,20 @@ type EmployeeProductivityRowResponse struct {
 	EntryCount    int    `json:"entryCount"`
 }
 
+// ProductStatisticsResponse is the JSON response for the product statistics report.
+type ProductStatisticsResponse struct {
+	Rows []ProductStatisticsRowResponse `json:"rows"`
+}
+
+// ProductStatisticsRowResponse is one row in the product statistics report response.
+type ProductStatisticsRowResponse struct {
+	ProductSKU    string `json:"productSku"`
+	ProductName   string `json:"productName"`
+	TotalQuantity int    `json:"totalQuantity"`
+	EntryCount    int    `json:"entryCount"`
+	EmployeeCount int    `json:"employeeCount"`
+}
+
 // DailyProduction handles GET /reports/daily-production.
 func (h *Handler) DailyProduction(c fuego.ContextNoBody) (DailyProductionResponse, error) {
 	from, to, err := reportRange(c)
@@ -79,6 +93,24 @@ func (h *Handler) EmployeeProductivity(c fuego.ContextNoBody) (EmployeeProductiv
 	}
 
 	return EmployeeProductivityResponse{Rows: employeeProductivityRowsResponse(rows)}, nil
+}
+
+// ProductStatistics handles GET /reports/product-statistics.
+func (h *Handler) ProductStatistics(c fuego.ContextNoBody) (ProductStatisticsResponse, error) {
+	from, to, err := reportRange(c)
+	if err != nil {
+		return ProductStatisticsResponse{}, invalidRangeError(err)
+	}
+
+	rows, err := h.store.ProductStatistics(c.Context(), from, to)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRange) {
+			return ProductStatisticsResponse{}, invalidRangeError(err)
+		}
+		return ProductStatisticsResponse{}, err
+	}
+
+	return ProductStatisticsResponse{Rows: productStatisticsRowsResponse(rows)}, nil
 }
 
 func reportRange(c fuego.ContextNoBody) (time.Time, time.Time, error) {
@@ -121,6 +153,14 @@ func employeeProductivityRowsResponse(rows []EmployeeProductivityRow) []Employee
 	response := make([]EmployeeProductivityRowResponse, 0, len(rows))
 	for _, row := range rows {
 		response = append(response, EmployeeProductivityRowResponse(row))
+	}
+	return response
+}
+
+func productStatisticsRowsResponse(rows []ProductStatisticsRow) []ProductStatisticsRowResponse {
+	response := make([]ProductStatisticsRowResponse, 0, len(rows))
+	for _, row := range rows {
+		response = append(response, ProductStatisticsRowResponse(row))
 	}
 	return response
 }

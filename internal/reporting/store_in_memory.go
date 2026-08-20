@@ -17,13 +17,15 @@ type InMemoryStore struct {
 	mu                       sync.RWMutex
 	dailyProductionRows      []DailyProductionRow
 	employeeProductivityRows []EmployeeProductivityRow
+	productStatisticsRows    []ProductStatisticsRow
 }
 
 // NewInMemoryStoreWithReports creates an in-memory store with all supported report rows.
-func NewInMemoryStoreWithReports(dailyRows []DailyProductionRow, employeeRows []EmployeeProductivityRow) *InMemoryStore {
+func NewInMemoryStoreWithReports(dailyRows []DailyProductionRow, employeeRows []EmployeeProductivityRow, productRows []ProductStatisticsRow) *InMemoryStore {
 	return &InMemoryStore{
 		dailyProductionRows:      append([]DailyProductionRow(nil), dailyRows...),
 		employeeProductivityRows: append([]EmployeeProductivityRow(nil), employeeRows...),
+		productStatisticsRows:    append([]ProductStatisticsRow(nil), productRows...),
 	}
 }
 
@@ -60,4 +62,16 @@ func (s *InMemoryStore) EmployeeProductivity(_ context.Context, from, to time.Ti
 	defer s.mu.RUnlock()
 
 	return append([]EmployeeProductivityRow(nil), s.employeeProductivityRows...), nil
+}
+
+// ProductStatistics returns stored product statistics rows for a valid range.
+func (s *InMemoryStore) ProductStatistics(_ context.Context, from, to time.Time) ([]ProductStatisticsRow, error) {
+	if err := validateRange(from, to); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return append([]ProductStatisticsRow(nil), s.productStatisticsRows...), nil
 }

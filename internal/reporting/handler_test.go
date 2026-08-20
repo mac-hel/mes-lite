@@ -75,7 +75,7 @@ func TestHandler_EmployeeProductivity(t *testing.T) {
 		LastName:      "Worker",
 		TotalQuantity: 7,
 		EntryCount:    2,
-	}})
+	}}, nil)
 	handler := NewHandler(store)
 	s := fuego.NewServer()
 	fuego.Get(s, "/reports/employee-productivity", handler.EmployeeProductivity)
@@ -101,11 +101,57 @@ func TestHandler_EmployeeProductivity(t *testing.T) {
 }
 
 func TestHandler_EmployeeProductivityInvalidRange(t *testing.T) {
-	handler := NewHandler(NewInMemoryStoreWithReports(nil, nil))
+	handler := NewHandler(NewInMemoryStoreWithReports(nil, nil, nil))
 	s := fuego.NewServer()
 	fuego.Get(s, "/reports/employee-productivity", handler.EmployeeProductivity)
 
 	req := httptest.NewRequest(http.MethodGet, "/reports/employee-productivity?from=2026-08-18T00:00:00Z&to=2026-08-18T00:00:00Z", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_ProductStatistics(t *testing.T) {
+	store := NewInMemoryStoreWithReports(nil, nil, []ProductStatisticsRow{{
+		ProductSKU:    "shaft-1",
+		ProductName:   "Shaft",
+		TotalQuantity: 7,
+		EntryCount:    2,
+		EmployeeCount: 2,
+	}})
+	handler := NewHandler(store)
+	s := fuego.NewServer()
+	fuego.Get(s, "/reports/product-statistics", handler.ProductStatistics)
+
+	req := httptest.NewRequest(http.MethodGet, "/reports/product-statistics?from=2026-08-18T00:00:00Z&to=2026-08-19T00:00:00Z", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp ProductStatisticsResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Rows) != 1 {
+		t.Fatalf("row count = %d, want 1", len(resp.Rows))
+	}
+	row := resp.Rows[0]
+	if row.ProductSKU != "shaft-1" || row.ProductName != "Shaft" || row.TotalQuantity != 7 || row.EmployeeCount != 2 {
+		t.Fatalf("row = %#v, want shaft-1 quantity 7 employee count 2", row)
+	}
+}
+
+func TestHandler_ProductStatisticsInvalidRange(t *testing.T) {
+	handler := NewHandler(NewInMemoryStoreWithReports(nil, nil, nil))
+	s := fuego.NewServer()
+	fuego.Get(s, "/reports/product-statistics", handler.ProductStatistics)
+
+	req := httptest.NewRequest(http.MethodGet, "/reports/product-statistics?from=2026-08-18T00:00:00Z&to=2026-08-18T00:00:00Z", nil)
 	w := httptest.NewRecorder()
 	s.Mux.ServeHTTP(w, req)
 

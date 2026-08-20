@@ -114,3 +114,57 @@ func (q *Queries) EmployeeProductivity(ctx context.Context, arg EmployeeProducti
 	}
 	return items, nil
 }
+
+const productStatistics = `-- name: ProductStatistics :many
+SELECT
+    pe.product_sku,
+    p.name AS product_name,
+    sum(pe.quantity)::bigint AS total_quantity,
+    count(*)::bigint AS entry_count,
+    count(DISTINCT pe.employee_id)::bigint AS employee_count
+FROM production_entries pe
+JOIN products p ON p.sku = pe.product_sku
+WHERE pe.occurred_at >= $1
+  AND pe.occurred_at < $2
+GROUP BY pe.product_sku, p.name
+ORDER BY total_quantity DESC, entry_count DESC, pe.product_sku ASC
+`
+
+type ProductStatisticsParams struct {
+	FromTime pgtype.Timestamptz `json:"from_time"`
+	ToTime   pgtype.Timestamptz `json:"to_time"`
+}
+
+type ProductStatisticsRow struct {
+	ProductSku    string `json:"product_sku"`
+	ProductName   string `json:"product_name"`
+	TotalQuantity int64  `json:"total_quantity"`
+	EntryCount    int64  `json:"entry_count"`
+	EmployeeCount int64  `json:"employee_count"`
+}
+
+func (q *Queries) ProductStatistics(ctx context.Context, arg ProductStatisticsParams) ([]ProductStatisticsRow, error) {
+	rows, err := q.db.Query(ctx, productStatistics, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProductStatisticsRow{}
+	for rows.Next() {
+		var i ProductStatisticsRow
+		if err := rows.Scan(
+			&i.ProductSku,
+			&i.ProductName,
+			&i.TotalQuantity,
+			&i.EntryCount,
+			&i.EmployeeCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
