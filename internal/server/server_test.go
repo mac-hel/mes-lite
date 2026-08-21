@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
@@ -485,6 +487,78 @@ func TestEmployeeProductivityProductsReportRejectsWorkerRole(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntryImportAllowsManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	csvImportH := csvimport.NewHandler(csvimport.NewService(csvimport.NewInMemoryStore()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	body := strings.Join([]string{
+		"employee_id,product_sku,quantity,workstation,timestamp,comment",
+		"emp-1,sku-1,12,ws-1,2026-08-20T10:00:00Z,valid",
+	}, "\n")
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries", strings.NewReader(body))
+	req.Header.Set("Content-Type", "text/csv")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var summary csvimport.ImportSummary
+	if err := json.NewDecoder(w.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.TotalRows != 1 || summary.ValidRows != 1 || summary.InvalidRows != 0 || summary.ImportedRows != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+}
+
+func TestProductionEntryImportRejectsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	csvImportH := csvimport.NewHandler(csvimport.NewService(csvimport.NewInMemoryStore()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	body := "employee_id,product_sku,quantity,workstation,timestamp,comment\n"
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries", strings.NewReader(body))
+	req.Header.Set("Content-Type", "text/csv")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntryImportRequiresAuthentication(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	csvImportH := csvimport.NewHandler(csvimport.NewService(csvimport.NewInMemoryStore()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	body := "employee_id,product_sku,quantity,workstation,timestamp,comment\n"
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries", strings.NewReader(body))
+	req.Header.Set("Content-Type", "text/csv")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntryImportRejectsInvalidCSVHeader(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	csvImportH := csvimport.NewHandler(csvimport.NewService(csvimport.NewInMemoryStore()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries", strings.NewReader("employee_id,quantity\n"))
+	req.Header.Set("Content-Type", "text/csv")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
@@ -92,7 +93,10 @@ func run() int {
 	reportingStore := reporting.NewPostgresStore(db)
 	reportingHandler := reporting.NewHandler(reportingStore)
 
-	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler)
+	csvImportStore := csvimport.NewPostgresStore(db)
+	csvImportHandler := csvimport.NewHandler(csvimport.NewService(csvImportStore))
+
+	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
 
 	if err := srv.Start(ctx); err != nil {
 		slog.Error("server shutdown with error", "err", err)

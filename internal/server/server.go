@@ -15,6 +15,7 @@ import (
 
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/production"
@@ -30,7 +31,7 @@ type Server struct {
 }
 
 // New creates a new Server with the given configuration and registers routes.
-func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler, reportingHandler *reporting.Handler) *Server {
+func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler, reportingHandler *reporting.Handler, csvImportHandlers ...*csvimport.Handler) *Server {
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 		fuego.WithSecurity(openapi3.SecuritySchemes{
@@ -51,6 +52,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	progressOrders := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 	registerProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader, auth.RoleWorker)))
 	readReports := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
+	importProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
 
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
@@ -83,6 +85,10 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	fuego.Get(s, "/reports/employee-productivity", reportingHandler.EmployeeProductivity, readReports)
 	fuego.Get(s, "/reports/employee-productivity/products", reportingHandler.EmployeeProductivityProducts, readReports)
 	fuego.Get(s, "/reports/product-statistics", reportingHandler.ProductStatistics, readReports)
+
+	if len(csvImportHandlers) > 0 && csvImportHandlers[0] != nil {
+		fuego.Post(s, "/imports/production-entries", csvImportHandlers[0].ImportProductionEntries, importProduction)
+	}
 
 	return &Server{Server: s, cfg: cfg}
 }
