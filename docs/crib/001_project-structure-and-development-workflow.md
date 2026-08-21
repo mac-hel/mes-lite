@@ -4,8 +4,9 @@
 
 **module** = versioned collection of Go packages
 * defined by `go.mod`
-* module path identifies the module
-* dependencies use **Minimal Version Selection (MVS)** to decide which module version will be compiled into build (in contrast to constraint-solving)
+* reproducible builds via `go.sum`
+* "module path" identifies the module and allows its import
+* dependency management uses **Minimal Version Selection (MVS)** to decide which module version will be compiled into build (in contrast to constraint-solving)
     * lowest version that satisfies all explicitly required versions (explicit `go get p@v1.6.0`, moudle A requires C 1.4.0, B requires 1.7.0 -> 1.7.0 is compiled)
     * no version ranges like `>=, ^, ~`, dependency always define minimal version
     * major version `example.com/lib/v2` is introduced for breaking changes - only way to import and compile different versions of same package
@@ -173,7 +174,7 @@ go test ./...
 go test -race ./...
 go test -cover ./...
 go test -bench=. -benchmem
-go mod tidy
+go mod tidy                     # operations on modules, also: edit, graph, vendor, why
 go list ./...
 go env
 go doc cmd/server myFunc        # show docs for: package, type, func, var etc.

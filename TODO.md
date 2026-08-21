@@ -40,3 +40,17 @@ ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical id
 
 ## <ADDED> Sanity tests
 Should we introduce sanity tests? Either implement new ones or convert some existing tests.
+
+## validation library
+Is there a place for validation library in the project, in any package, in any layer?
+
+## golangci-lint
+- improve configuration of used linters
+- improve usage of this tool (what other useful capabilities it has)
+- what linters are worth to add?
+    - their configuration
+
+## air
+- improve config
+
+## GitHub Actions, pre-commit hooks

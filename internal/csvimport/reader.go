@@ -76,6 +76,10 @@ func (r *ProductionEntryReader) Read() (ProductionEntryRow, error) {
 		if errors.Is(err, io.EOF) {
 			return ProductionEntryRow{}, io.EOF
 		}
+		if errors.Is(err, csv.ErrFieldCount) {
+			r.rowNumber++
+			return ProductionEntryRow{}, fmt.Errorf("row %d has invalid field count: %w", r.rowNumber, ErrInvalidRecord)
+		}
 		return ProductionEntryRow{}, fmt.Errorf("read csv record: %w", err)
 	}
 

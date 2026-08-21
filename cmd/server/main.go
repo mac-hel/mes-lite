@@ -1,3 +1,7 @@
+// Package main is the entry point for the MES-Lite server application.
+// It initializes the server, sets up the database connection, configures
+// authentication, and starts the HTTP server with the appropriate handlers for
+// various endpoints.
 package main
 
 import (

@@ -4,6 +4,7 @@
 
 1. Run `make docker-up` on a machine with Docker running — verify PostgreSQL starts and is connectable
 2. Read `docs/adr/0001-project-layout.md` — can you think of a case where `pkg/` would be justified instead of `internal/`?
+    - `pkg/` sould contain packages intended for external consumption (e.g. in library)
 3. Add a `make install-tools` target that installs `golangci-lint` and `air`
 
 ### Interview Questions
