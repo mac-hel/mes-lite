@@ -146,8 +146,10 @@ Errors are values: `if err != nil { ... }`
 Sentinel error: `var ErrNotFound = errors.New("not found")`
     - Useful when callers need only a category.
     - Potential downside: exported sentinel becomes API coupling
-Typed error: `type ValidationError struct { Field string }`
+Typed error: `type MyErr struct { Field string; Err error }`
     - Useful when the caller needs structured information.
+    - `func (e MyErr) Error() string { return fmt.Sprintf("f %s: %v", e.Field, e.Err) }`    - human readable string
+    - `func (e MyErr) Unwrap() error { return e.Err }`                                      - unwrap underlying error
 
 ## Wrapping
 **wrap** to add context at abstraction boundaries, `%w` preserves the error chain:
@@ -155,7 +157,7 @@ Typed error: `type ValidationError struct { Field string }`
 
 **Inspect** (is recursive), prefer `errors.Is`/`errors.As` over `equality` or `type assertions` when errors may be wrapped:
 `if errors.Is(err, sql.ErrNoRows) { ... }`
-`var e *ValidationError; if errors.As(err, &e) { ... }`
+`var e *MyErr; if errors.As(err, &e) { ... }`
 
 ## Error ownership
 - avoid repeatedly wrapping with meaningless text

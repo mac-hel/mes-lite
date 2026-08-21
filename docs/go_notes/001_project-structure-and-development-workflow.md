@@ -89,24 +89,20 @@ Guidelines:
 
 * prefer a short noun or domain concept
 * singular often works well for a capability or abstraction:
-
   * `user`
   * `order`
   * `payment`
 * plural is fine when it naturally describes operations over a collection/domain:
-
   * `strings`
   * `bytes`
   * `slices`
   * `maps`
 * avoid awkward repetition:
-
   ```go
   user.UserService       // suspicious
   users.Service          // often better
   ```
 * judge the API from the **caller side**:
-
   ```go
   package.Type
   package.Function()

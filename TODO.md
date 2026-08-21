@@ -41,8 +41,15 @@ ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical id
 ## <ADDED> Sanity tests
 Should we introduce sanity tests? Either implement new ones or convert some existing tests.
 
+## cross-cutting/infra dir?
+Is this good idea to move packages not related to business domain into one or two common directories?
+Cross-cutting or infrastructure related packages that could be moved: auth, config, postgres, server, version.
+
 ## validation library
 Is there a place for validation library in the project, in any package, in any layer?
+
+## pipeline
+inspect and make it useful
 
 ## golangci-lint
 - improve configuration of used linters

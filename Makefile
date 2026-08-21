@@ -1,3 +1,9 @@
+# Skip target name (1st arg) from command line arguments
+ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+# Prevent "No rule to make target" error
+%:
+	@:
+
 .PHONY: build test lint clean run migrate sqlc help
 
 APP_NAME = mes-lite
@@ -24,11 +30,11 @@ migrate: ## Run database migrations
 sqlc: ## Generate sqlc database code
 	sqlc generate
 
-test: ## Run tests
-	go test ./... -v -count=1
+test: ## Run tests (e.g.: internal/csvimport; ...)
+	go test ./$(ARGS) -v -count=1
 
 test-race: ## Run tests with race detector # -shuffle=on
-	go test ./... -v -count=1 -race
+	go test ./$(ARGS) -v -count=1 -race
 
 test-cover: ## Run tests with coverage
 	go test ./... -v -count=1 -coverprofile=coverage.out
@@ -41,8 +47,8 @@ install-tools:
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
-fmt: ## Format Go code
-	go fmt ./...
+fmt: ## Format Go code (e.g.: internal/csvimport; ...)
+	go fmt ./$(ARGS)
 
 tidy: ## Tidy Go modules
 	go mod tidy
