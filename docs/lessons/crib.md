@@ -304,16 +304,21 @@ when necessary.
 
 # Various
 
-- `import time`:
-        - var now time.Time = time.Now().UTC()
-        - var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
-        - ttl.IsZero()
-	    - s := now.Format(time.RFC3339) / now, err := time.Parse(time.RFC3339, s)
-
 - `os.Exit` - does not trigger deferred functions
 - `crypto/rand` and `encoding/hex` for standard-library UUID-shaped IDs
 - blank imports
 - variadic function parameters: `func (nums ...int)`
+
+## Time `import time`
+- var now time.Time = time.Now().UTC()
+- var ttl time.Duration = 15 * time.Minute, now.Add(ttl)
+- ttl.IsZero()
+- s := now.Format(time.RFC3339) / now, err := time.Parse(time.RFC3339, s)
+
+## Streams `import io`
+- io.Reader     // interface
+- io.EOF        // sentinel error
+- stream := strings.NewReader("string")     // strings.Reader implementing various io interfaces
 
 ---
 
@@ -1232,6 +1237,7 @@ b := s                  // copies reference; NOT independent copy: both refer to
 b[0] = 99               // now s[0] == 99
 
 s = append(s, 23)       // if capacity insufficient, append will: allocate new backing array, copy elements
+slices.Equals(s1, s2)
 ```
 
 ## Subslice aliases memory
@@ -1519,11 +1525,11 @@ strings.ToLower
 strings.TrimSpace
 strings.HasPrefix(s, prefix)
 strings.TrimPrefix(s, prefix)
+strings.Join([]string{"str1", "str2"}, "\n"))
+strings.Count(str, substr)              // count non-overlapping substr in str
 
 strconv.Atoi(s)/ParseInt(S,10,0)        // str -> int
 strconv.ParseBool(b)                    // str -> bool
-
-strings.Count(str, substr)              // count non-overlapping substr in str
 
 ## Stringer interface
 `fmt.Stringer` interface (`String() string`) - `fmt.Print`, `%s`, `%v` all produce a readable label; useful for logging and JSON serialization.

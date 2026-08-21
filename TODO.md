@@ -38,4 +38,5 @@ see `docs/sqlc-boundaries.md`
 What do you think about using UUID and int ID simultaneously? UUID for user-facing things, int for internal references (for speed).
 ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical identifier per entity. If performance becomes real later, benchmark and revisit with data.
 
-## Sanity tests?
+## <ADDED> Sanity tests
+Should we introduce sanity tests? Either implement new ones or convert some existing tests.
