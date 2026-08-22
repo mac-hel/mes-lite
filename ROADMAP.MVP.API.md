@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.29
+**Version:** 2.30
 **Status:** IN PROGRESS
-**Current milestone:** 9 - CSV Import
-**Current lesson:** L9.5 - CSV Import Review & Performance
+**Current milestone:** 10 - MVP API Completion
+**Current lesson:** L10.1 - Production Entry Review API
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -37,12 +37,13 @@ This section must always reflect the current progress.
 - Milestone 6
 - Milestone 7
 - Milestone 8
-**Next milestone:** 10 - MVP API Completion
+- Milestone 9
+**Next milestone:** 11 - Background Jobs & Concurrency
 **Current branch:** main
-**Architecture maturity:** 8.1 / 10
-**Go knowledge progress:** 67%
-**Interview readiness:** 61%
-**Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow.
+**Architecture maturity:** 8.2 / 10
+**Go knowledge progress:** 68%
+**Interview readiness:** 63%
+**Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it.
 
 The AI must update this section at the end of every lesson and milestone.
 
@@ -110,7 +111,7 @@ The AI should update it after every completed milestone.
 - [x] RWMutex
 - [ ] Atomic
 - [ ] Worker Pools
-- [ ] Pipelines
+- [x] Pipelines
 - [ ] Race Detector
 
 **Architecture**
@@ -3051,7 +3052,7 @@ Different users have different permissions.
 
 Status
 
-🚧 In Progress
+✅ Completed
 
 ### Lessons
 
@@ -4635,7 +4636,7 @@ Managers can review production summaries without maintaining Excel reports manua
 
 Status
 
-🚧 In Progress
+✅ Completed
 
 ### Lessons
 
@@ -4643,7 +4644,7 @@ Status
 - **L9.2** — Row Validation & Error Collection ✅
 - **L9.3** — Batch Persistence & Transaction Strategy ✅
 - **L9.4** — Import Summary API & Partial Failure Reporting ✅
-- **L9.5** — CSV Import Review & Performance
+- **L9.5** — CSV Import Review & Performance ✅
 
 ### Lesson 9.1 Scope
 
@@ -5040,6 +5041,146 @@ The main follow-up is performance review in L9.5. The current service validates 
 - Lesson 9.4 completed.
 - Current lesson moved to Lesson 9.5.
 - L9.5 remains focused on CSV import review and performance.
+
+### Lesson 9.5 Scope
+
+Review the CSV import pipeline for large-file behavior before closing Milestone 9.
+
+#### Business Context
+
+Historical production files may be large. The import endpoint should remain predictable and should not require loading all valid rows or all validation errors into memory at once.
+
+#### Problem
+
+The L9.4 service streamed the HTTP body into the CSV reader, but then collected every valid row before saving. That defeated part of the milestone's streaming goal for large valid files.
+
+#### Design Discussion
+
+The import service now processes rows incrementally and saves valid records in bounded batches. This keeps the main valid-row memory cost proportional to the batch size rather than the file size.
+
+Reported row errors are also capped. The summary still counts every invalid row, but only stores the first bounded set of errors. This is a production trade-off: exact counts remain available, while response size and memory usage are protected for very bad files.
+
+If a batch fails with a row-level persistence error such as a duplicate production entry or invalid reference, the service retries that batch row by row. This keeps retry imports useful: already-imported rows can be reported as row errors while new valid rows in the same file still get imported.
+
+#### Go Concepts
+
+- bounded batching with slices
+- exact counters separated from retained detail records
+- streaming loop with `io.EOF` as normal completion
+- memory safety trade-offs in API response design
+
+#### Architecture Concepts
+
+- import pipeline review before milestone closure
+- batch size as an implementation detail
+- bounded error reporting for production safety
+- explicit technical debt for future PostgreSQL `COPY` optimization
+
+### Lesson 9.5 Completion Notes
+
+#### Business Context
+
+MES Lite's CSV import path is now suitable for MVP historical data migration with bounded memory behavior for valid rows and bounded response/error storage for invalid rows.
+
+#### Problem
+
+The service accepted an `io.Reader`, but validated the entire CSV into slices before saving. Large valid imports would grow memory with file size.
+
+#### Design Discussion
+
+Refactored `ImportProductionEntries` into a streaming pipeline. It reads one row, validates one row and appends only valid records to a fixed-size batch. When the batch reaches the configured size, the service persists it and reuses the same slice.
+
+The API reports at most `maxReportedErrors` row errors while continuing to count all invalid rows. The response includes `errorLimitReached` so clients know whether detailed errors were truncated.
+
+Failed batches are isolated by retrying records individually when the failure is row-level. Unexpected infrastructure failures still terminate the import because they cannot be safely attributed to one CSV row.
+
+#### Implementation
+
+- Added `defaultImportBatchSize` for bounded valid-row batches.
+- Added `maxReportedErrors` for bounded error detail storage.
+- Refactored `ImportProductionEntries` to save batches during streaming instead of collecting all valid rows first.
+- Added `errorLimitReached` to `ImportSummary`.
+- Added row-by-row isolation after row-level batch persistence failures.
+- Preserved exact `totalRows`, `validRows`, `invalidRows` and `importedRows` counters.
+- Kept `ValidateProductionEntries` for focused validation tests, while the service uses the lower-level row validator for streaming.
+
+#### Tests
+
+- Added large-input test proving 1,205 valid rows are saved as batches of 500, 500 and 205.
+- Added large-invalid-input test proving invalid row counts remain exact while reported errors are capped.
+- Added retry/import-continuation tests proving duplicate/already-existing rows become summary errors while other valid rows still import.
+- Verified no save calls happen when all rows are invalid.
+- Verified with `go test ./internal/csvimport -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+The service now owns the streaming pipeline directly instead of delegating to `ValidateProductionEntries`, because the service must interleave validation and batch persistence for large files.
+
+#### Code Review
+
+An experienced Go engineer would approve the milestone for MVP scale: the code is standard-library based, validates rows explicitly, persists valid rows in bounded batches, isolates row-level persistence failures and returns clear summaries.
+
+The main performance follow-up is database insert strategy. Current batch persistence still uses one regular `INSERT` per row inside a transaction. PostgreSQL `COPY` or `pgx.CopyFrom` may be justified later for very large imports, but adding it now would complicate the lesson before real performance data exists.
+
+#### Exercises
+
+- Make `defaultImportBatchSize` configurable and discuss whether it belongs in environment configuration.
+- Add a benchmark comparing all-at-once validation with bounded-batch streaming.
+- Sketch how a future background job would stream the same import without blocking an HTTP request.
+
+#### Interview Questions
+
+- Why does accepting `io.Reader` not automatically guarantee low memory usage?
+- Why can response error details need a cap even if row processing is streamed?
+- What trade-offs exist between regular batched `INSERT` and PostgreSQL `COPY`?
+- Why might CSV import become a background job in a production system?
+
+#### Roadmap Update
+
+- Lesson 9.5 completed.
+- Milestone 9 completed.
+- Current milestone moved to Milestone 10.
+- Current lesson moved to Lesson 10.1.
+- Concurrency `Pipelines` marked complete in the Knowledge Matrix.
+
+### Milestone 9 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve the CSV import slice for MVP. The package owns raw CSV reading, typed row validation, import orchestration, batch persistence and HTTP upload handling without leaking those concerns into the production registration slice.
+
+The design is intentionally pragmatic: CSV import converts to `production.Entry` before persistence, reuses the existing production insert query and keeps PostgreSQL constraints as the final reference-integrity guardrail.
+
+#### Code Review
+
+The implementation is explicit and idiomatic. It uses `io.Reader`, `encoding/csv`, sentinel errors, `errors.Is`, `errors.As`, bounded slices and transaction-backed persistence.
+
+The main improvement for later is performance at database scale. If imports become very large, `pgx.CopyFrom`, background jobs and progress tracking should be considered.
+
+#### Refactoring
+
+The main L9.5 refactor changed service orchestration from collect-all validation to streaming validation plus bounded batch saves. This better matches the milestone's streaming goal.
+
+#### Interview Review
+
+You should now be able to explain why `io.Reader` is fundamental, why `encoding/csv.Reader` is safer than `strings.Split`, why `io.EOF` is normal stream completion, how to collect row errors safely, why transactions protect import batches and why batching is not the same as loading a full file into memory.
+
+#### Completion Criteria
+
+- CSV import endpoint implemented.
+- CSV rows are streamed from request body.
+- Row validation and structured error collection implemented.
+- Valid rows are persisted in bounded transactional batches.
+- Failed batches are isolated so retry imports can continue past duplicate/already-existing rows.
+- Import summary reports totals and partial failures.
+- Management RBAC protects import endpoint.
+- Large valid input is processed in bounded batches.
+- Reported error details are capped while invalid-row counts remain exact.
+- Tests, build and lint pass.
+- Roadmap updated.
 
 ### Goal
 

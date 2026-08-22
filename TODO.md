@@ -61,3 +61,24 @@ inspect and make it useful
 - improve config
 
 ## GitHub Actions, pre-commit hooks
+
+
+
+
+## Conversion Learn->Real Project
+1. documentation/knowledge for AI (AI-driven development)
+What is needed (documentation, knowledge, skills, commands, prompts, AGENTS.md)
+project summary/compaction?
+input:
+    - ROADMAPs
+    - code in repo
+    - summary from GPT (for me an Piter - marketing, concept)
+    - docs/system-design/architecture-and-mvp.md or/and docs/system-design-ai-conversation.md
+    - docs/adr/*
+    - docs/sqlc-boundaries.md,validation.md
+2. finish TODOs
+3. review whole project for problems, bugs, inconsistencies, gaps, improvements, refactors.
+    - docs
+    - code
+    - devops and tooling
+4. developer's guide: whole path/route from README.md -> docs (about GO, about Project) -> proj arch/struct + packages relations -> code
