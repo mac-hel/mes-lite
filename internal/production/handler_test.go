@@ -139,3 +139,66 @@ func TestHandler_Register_MissingReference(t *testing.T) {
 		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestHandler_List(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(testRegistrationService(t, store))
+	s := fuego.NewServer()
+	fuego.Get(s, "/production-entries", handler.List)
+
+	first := mustProductionEntry(t, "00000000-0000-4000-8000-000000000001", "emp-1", "sku-1", 12, "assembly-1", "2026-08-08T10:30:00Z")
+	second := mustProductionEntry(t, "00000000-0000-4000-8000-000000000002", "emp-1", "sku-1", 7, "assembly-2", "2026-08-09T10:30:00Z")
+	third := mustProductionEntry(t, "00000000-0000-4000-8000-000000000003", "emp-1", "sku-2", 4, "paint", "2026-08-10T10:30:00Z")
+	for _, entry := range []Entry{first, second, third} {
+		if err := store.Save(t.Context(), entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/production-entries?productSku=sku-1&workstation=assembly&from=2026-08-08T00:00:00Z&to=2026-08-10T00:00:00Z&limit=1", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response ListProductionEntriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Pagination.Count != 1 {
+		t.Fatalf("expected one entry, got %d", response.Pagination.Count)
+	}
+	if response.Entries[0].ID != second.ID {
+		t.Fatalf("expected newest matching entry %q, got %q", second.ID, response.Entries[0].ID)
+	}
+}
+
+func TestHandler_List_InvalidQuery(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(testRegistrationService(t, store))
+	s := fuego.NewServer()
+	fuego.Get(s, "/production-entries", handler.List)
+
+	req := httptest.NewRequest(http.MethodGet, "/production-entries?from=not-a-time", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func mustProductionEntry(t *testing.T, id, employeeID, productSKU string, quantity int, workstation, timestamp string) Entry {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := NewEntry(id, employeeID, productSKU, quantity, workstation, parsed, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}

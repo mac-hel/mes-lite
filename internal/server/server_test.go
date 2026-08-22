@@ -251,6 +251,42 @@ func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
 	}
 }
 
+func TestProductionEntriesReviewAllowsLeaderRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, createReq, tokens, auth.RoleWorker)
+	createW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", createW.Code, createW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/production-entries?employeeId=emp-1", nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntriesReviewForbidsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/production-entries", nil)
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestProductionOrdersRouteAllowsManagerCreate(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)

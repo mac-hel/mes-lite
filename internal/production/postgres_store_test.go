@@ -172,3 +172,34 @@ func TestPostgresStore_SaveMissingReference(t *testing.T) {
 		t.Fatalf("expected failed insert to leave no row, got %v", err)
 	}
 }
+
+func TestPostgresStore_ListFiltersAndPaginates(t *testing.T) {
+	store := testPostgresStore(t)
+	entries := []Entry{
+		mustProductionEntry(t, "00000000-0000-4000-8000-000000000011", "emp-1", "sku-1", 3, "assembly-1", "2026-08-08T10:30:00Z"),
+		mustProductionEntry(t, "00000000-0000-4000-8000-000000000012", "emp-1", "sku-1", 5, "assembly-2", "2026-08-09T10:30:00Z"),
+		mustProductionEntry(t, "00000000-0000-4000-8000-000000000013", "emp-1", "sku-1", 7, "paint", "2026-08-09T11:30:00Z"),
+	}
+	for _, entry := range entries {
+		if err := store.Save(t.Context(), entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := store.List(t.Context(), ListOptions{
+		ProductSKU:  "sku-1",
+		Workstation: "assembly",
+		From:        time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC),
+		To:          time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC),
+		Limit:       1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected one entry, got %d", len(got))
+	}
+	if got[0].ID != entries[1].ID {
+		t.Fatalf("expected newest matching entry %q, got %q", entries[1].ID, got[0].ID)
+	}
+}

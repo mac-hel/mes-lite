@@ -62,13 +62,28 @@ inspect and make it useful
 
 ## GitHub Actions, pre-commit hooks
 
+## Multiple Factories
+What if company runs multiple factories?
+Should production be managed separately, but in single system?
+
+## Multiple Clients
+- Separate or single repository for each client?
+- Should they have any common core?
+- How organize development and deploys?
+- For cloud-based application - single domain with subdomains (e.g. companyA.meslite.app) or separate domain (e.g. companyA.app)?
+
 
 
 
 ## Conversion Learn->Real Project
 1. documentation/knowledge for AI (AI-driven development)
 What is needed (documentation, knowledge, skills, commands, prompts, AGENTS.md)
-project summary/compaction?
+project business requirements? (+summary/compaction?)
+project technical description? (+summary/compaction?)
+project architecture? (+summary/compaction?)
+project design? (+summary/compaction?)
+should all those documents be live and updated periodically?
+Is this knowledge-base?
 input:
     - ROADMAPs
     - code in repo

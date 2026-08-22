@@ -91,6 +91,11 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, err
 	return entry, nil
 }
 
+// List returns production entries for review workflows.
+func (s *Service) List(ctx context.Context, opts ListOptions) ([]Entry, error) {
+	return s.entries.List(ctx, opts)
+}
+
 func (s *Service) validateEmployee(ctx context.Context, id string) error {
 	emp, err := s.employees.FindByID(ctx, id)
 	if err != nil {

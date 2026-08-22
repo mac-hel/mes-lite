@@ -53,6 +53,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	registerProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader, auth.RoleWorker)))
 	readReports := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 	importProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
+	reviewProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 
 	fuego.Get(s, "/ready", readyHandler)
 	fuego.Get(s, "/health", healthHandler)
@@ -71,6 +72,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, manageProducts)
 
 	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
+	fuego.Get(s, "/production-entries", productionHandler.List, reviewProduction)
 
 	fuego.Post(s, "/production-orders", ordersHandler.Create, manageOrders)
 	fuego.Get(s, "/production-orders/{id}", ordersHandler.Get, readMasterData)

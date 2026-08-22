@@ -3,6 +3,8 @@ package production
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // NewInMemoryStore creates a map-based in-memory [InMemoryStore].
@@ -34,4 +36,49 @@ func (s *InMemoryStore) FindByID(_ context.Context, id string) (Entry, error) {
 		return Entry{}, fmt.Errorf("production entry %q: %w", id, ErrNotFound)
 	}
 	return entry, nil
+}
+
+// List returns production entries matching review filters, newest first.
+func (s *InMemoryStore) List(_ context.Context, opts ListOptions) ([]Entry, error) {
+	opts, err := opts.normalize()
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]Entry, 0, len(s.entries))
+	for _, entry := range s.entries {
+		if opts.EmployeeID != "" && entry.EmployeeID != opts.EmployeeID {
+			continue
+		}
+		if opts.ProductSKU != "" && entry.ProductSKU != opts.ProductSKU {
+			continue
+		}
+		if opts.Workstation != "" && !strings.Contains(strings.ToLower(entry.Workstation), strings.ToLower(opts.Workstation)) {
+			continue
+		}
+		if !opts.From.IsZero() && entry.Timestamp.Before(opts.From) {
+			continue
+		}
+		if !opts.To.IsZero() && !entry.Timestamp.Before(opts.To) {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Timestamp.Equal(entries[j].Timestamp) {
+			return entries[i].ID > entries[j].ID
+		}
+		return entries[i].Timestamp.After(entries[j].Timestamp)
+	})
+
+	if opts.Offset >= len(entries) {
+		return []Entry{}, nil
+	}
+	end := opts.Offset + opts.Limit
+	if end > len(entries) {
+		end = len(entries)
+	}
+
+	return entries[opts.Offset:end], nil
 }

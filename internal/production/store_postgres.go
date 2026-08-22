@@ -70,6 +70,40 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Entry, error) 
 	return entryFromDB(entry)
 }
 
+// List returns production entries matching review filters, newest first.
+func (s *PostgresStore) List(ctx context.Context, opts ListOptions) ([]Entry, error) {
+	opts, err := opts.normalize()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.ListEntries(ctx, productiondb.ListEntriesParams{
+		EmployeeID:  opts.EmployeeID,
+		ProductSku:  opts.ProductSKU,
+		Workstation: opts.Workstation,
+		FromTime:    !opts.From.IsZero(),
+		FromValue:   pgtype.Timestamptz{Time: opts.From, Valid: !opts.From.IsZero()},
+		ToTime:      !opts.To.IsZero(),
+		ToValue:     pgtype.Timestamptz{Time: opts.To, Valid: !opts.To.IsZero()},
+		LimitValue:  int32(opts.Limit),
+		OffsetValue: int32(opts.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]Entry, 0, len(rows))
+	for _, row := range rows {
+		entry, err := entryFromDB(row)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
+}
+
 func mapPostgresError(id string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

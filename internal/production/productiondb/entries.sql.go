@@ -84,11 +84,39 @@ func (q *Queries) GetEntry(ctx context.Context, id pgtype.UUID) (ProductionEntry
 const listEntries = `-- name: ListEntries :many
 SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
 FROM production_entries
-ORDER BY occurred_at DESC, created_at DESC
+WHERE ($1::text = '' OR employee_id = $1::text)
+  AND ($2::text = '' OR product_sku = $2::text)
+  AND ($3::text = '' OR lower(workstation) LIKE '%' || lower($3::text) || '%')
+  AND (NOT $4::boolean OR occurred_at >= $5)
+  AND (NOT $6::boolean OR occurred_at < $7)
+ORDER BY occurred_at DESC, created_at DESC, id DESC
+LIMIT $9 OFFSET $8
 `
 
-func (q *Queries) ListEntries(ctx context.Context) ([]ProductionEntry, error) {
-	rows, err := q.db.Query(ctx, listEntries)
+type ListEntriesParams struct {
+	EmployeeID  string             `json:"employee_id"`
+	ProductSku  string             `json:"product_sku"`
+	Workstation string             `json:"workstation"`
+	FromTime    bool               `json:"from_time"`
+	FromValue   pgtype.Timestamptz `json:"from_value"`
+	ToTime      bool               `json:"to_time"`
+	ToValue     pgtype.Timestamptz `json:"to_value"`
+	OffsetValue int32              `json:"offset_value"`
+	LimitValue  int32              `json:"limit_value"`
+}
+
+func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]ProductionEntry, error) {
+	rows, err := q.db.Query(ctx, listEntries,
+		arg.EmployeeID,
+		arg.ProductSku,
+		arg.Workstation,
+		arg.FromTime,
+		arg.FromValue,
+		arg.ToTime,
+		arg.ToValue,
+		arg.OffsetValue,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
