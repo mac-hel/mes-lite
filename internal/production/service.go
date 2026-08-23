@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/employees"
@@ -33,6 +34,7 @@ type ProductLookup interface {
 
 // RegisterCommand contains the business input needed to register completed production.
 type RegisterCommand struct {
+	RequestID   string
 	EmployeeID  string
 	ProductSKU  string
 	Quantity    int
@@ -59,13 +61,18 @@ func NewService(entries Store, employees EmployeeLookup, products ProductLookup)
 
 // Register validates business references and persists a production entry.
 func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, error) {
+	if strings.TrimSpace(cmd.RequestID) == "" {
+		return Entry{}, fmt.Errorf("request id is required: %w", ErrInvalidEntry)
+	}
+
 	id, err := NewEntryID()
 	if err != nil {
 		return Entry{}, err
 	}
 
-	entry, err := NewEntry(
+	entry, err := NewEntryWithRequestID(
 		id,
+		cmd.RequestID,
 		cmd.EmployeeID,
 		cmd.ProductSKU,
 		cmd.Quantity,
@@ -85,10 +92,34 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, err
 	}
 
 	if err := s.entries.Save(ctx, entry); err != nil {
+		if errors.Is(err, ErrRequestConflict) {
+			return s.resolveIdempotentRegistration(ctx, entry)
+		}
 		return Entry{}, err
 	}
 
 	return entry, nil
+}
+
+func (s *Service) resolveIdempotentRegistration(ctx context.Context, entry Entry) (Entry, error) {
+	existing, err := s.entries.FindByRequestID(ctx, entry.RequestID)
+	if err != nil {
+		return Entry{}, err
+	}
+	if sameProductionRequest(existing, entry) {
+		return existing, nil
+	}
+	return Entry{}, fmt.Errorf("request id %q already used for different production entry: %w", entry.RequestID, ErrRequestConflict)
+}
+
+func sameProductionRequest(a, b Entry) bool {
+	return a.RequestID == b.RequestID &&
+		a.EmployeeID == b.EmployeeID &&
+		a.ProductSKU == b.ProductSKU &&
+		a.Quantity == b.Quantity &&
+		a.Workstation == b.Workstation &&
+		a.Timestamp.Equal(b.Timestamp) &&
+		a.Comment == b.Comment
 }
 
 // List returns production entries for review workflows.

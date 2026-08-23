@@ -1,25 +1,37 @@
 # Various
 
+Go tries to make **ownership, dependencies, control flow, and boundaries** visible in the code.
+It has relatively few language mechanisms, but those mechanisms interact in important ways.
+
 ## Various
 
-- blank imports
 - variadic function parameters: `func (nums ...int)`
 - `any` is an alias for: `interface{}`
     - Use it where arbitrary values are genuinely necessary, not simply to avoid designing types.
 - `comparable` - A generic constraint for types supporting: `== !=`, Required for generic map keys.
 
-## Functional options
+## Blank imports
 
-Useful when constructors accumulate optional configuration:
-
+`import _ "some/package"`
+Imports a package only for its side effects - you cannot reference the package directly.
+The primary side effect is package initialization:
 ```go
-client := NewClient(
-    WithTimeout(time.Second),
-    WithLogger(logger),
-)
+func init() {
+    // registration
+}
 ```
 
-Avoid using the pattern when a plain configuration struct is clearer.
+Historically this pattern is common for plugins/drivers, e.g.:
+```go
+import (
+    "database/sql"
+    _ "github.com/example/database-driver"
+)
+sql.Open(...)   // now can do - without directly calling the driver package.
+```
+The driver registers itself with `database/sql` during initialization.
+
+Blank imports can hide dependency relationships, so use them when a registration architecture intentionally requires them rather than as a general-purpose technique.
 
 ---
 

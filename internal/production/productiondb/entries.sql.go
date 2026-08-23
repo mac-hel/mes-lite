@@ -14,6 +14,7 @@ import (
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO production_entries (
     id,
+    request_id,
     employee_id,
     product_sku,
     quantity,
@@ -21,12 +22,13 @@ INSERT INTO production_entries (
     occurred_at,
     comment
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
 `
 
 type CreateEntryParams struct {
 	ID          pgtype.UUID        `json:"id"`
+	RequestID   string             `json:"request_id"`
 	EmployeeID  string             `json:"employee_id"`
 	ProductSku  string             `json:"product_sku"`
 	Quantity    int32              `json:"quantity"`
@@ -38,6 +40,7 @@ type CreateEntryParams struct {
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (ProductionEntry, error) {
 	row := q.db.QueryRow(ctx, createEntry,
 		arg.ID,
+		arg.RequestID,
 		arg.EmployeeID,
 		arg.ProductSku,
 		arg.Quantity,
@@ -55,12 +58,13 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Produ
 		&i.OccurredAt,
 		&i.Comment,
 		&i.CreatedAt,
+		&i.RequestID,
 	)
 	return i, err
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
 FROM production_entries
 WHERE id = $1
 `
@@ -77,12 +81,36 @@ func (q *Queries) GetEntry(ctx context.Context, id pgtype.UUID) (ProductionEntry
 		&i.OccurredAt,
 		&i.Comment,
 		&i.CreatedAt,
+		&i.RequestID,
+	)
+	return i, err
+}
+
+const getEntryByRequestID = `-- name: GetEntryByRequestID :one
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
+FROM production_entries
+WHERE request_id = $1
+`
+
+func (q *Queries) GetEntryByRequestID(ctx context.Context, requestID string) (ProductionEntry, error) {
+	row := q.db.QueryRow(ctx, getEntryByRequestID, requestID)
+	var i ProductionEntry
+	err := row.Scan(
+		&i.ID,
+		&i.EmployeeID,
+		&i.ProductSku,
+		&i.Quantity,
+		&i.Workstation,
+		&i.OccurredAt,
+		&i.Comment,
+		&i.CreatedAt,
+		&i.RequestID,
 	)
 	return i, err
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
 FROM production_entries
 WHERE ($1::text = '' OR employee_id = $1::text)
   AND ($2::text = '' OR product_sku = $2::text)
@@ -133,6 +161,7 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Pro
 			&i.OccurredAt,
 			&i.Comment,
 			&i.CreatedAt,
+			&i.RequestID,
 		); err != nil {
 			return nil, err
 		}

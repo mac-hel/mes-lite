@@ -38,6 +38,7 @@ func (s *PostgresStore) Save(ctx context.Context, entry Entry) error {
 
 	_, err = s.queries.CreateEntry(ctx, productiondb.CreateEntryParams{
 		ID:          id,
+		RequestID:   entry.RequestID,
 		EmployeeID:  entry.EmployeeID,
 		ProductSku:  entry.ProductSKU,
 		Quantity:    int32(entry.Quantity),
@@ -63,6 +64,19 @@ func (s *PostgresStore) FindByID(ctx context.Context, id string) (Entry, error) 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Entry{}, fmt.Errorf("production entry %q: %w", id, ErrNotFound)
+		}
+		return Entry{}, err
+	}
+
+	return entryFromDB(entry)
+}
+
+// FindByRequestID looks up a production entry by idempotency request ID in PostgreSQL.
+func (s *PostgresStore) FindByRequestID(ctx context.Context, requestID string) (Entry, error) {
+	entry, err := s.queries.GetEntryByRequestID(ctx, strings.TrimSpace(requestID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Entry{}, fmt.Errorf("production request id %q: %w", requestID, ErrNotFound)
 		}
 		return Entry{}, err
 	}
@@ -109,6 +123,9 @@ func mapPostgresError(id string, err error) error {
 	if errors.As(err, &pgErr) {
 		switch postgres.SQLState(pgErr.Code) {
 		case postgres.UniqueViolation:
+			if pgErr.ConstraintName == "production_entries_request_id_key" {
+				return fmt.Errorf("production entry %q: %w", id, ErrRequestConflict)
+			}
 			return fmt.Errorf("production entry %q: %w", id, ErrAlreadyExists)
 		case postgres.CheckViolation, postgres.NotNullViolation, postgres.InvalidTextValue, postgres.ForeignKeyViolation:
 			return fmt.Errorf("production entry %q: %w", id, ErrInvalidEntry)
@@ -119,8 +136,9 @@ func mapPostgresError(id string, err error) error {
 }
 
 func entryFromDB(entry productiondb.ProductionEntry) (Entry, error) {
-	return NewEntry(
+	return NewEntryWithRequestID(
 		uuidString(entry.ID),
+		entry.RequestID,
 		entry.EmployeeID,
 		entry.ProductSku,
 		int(entry.Quantity),

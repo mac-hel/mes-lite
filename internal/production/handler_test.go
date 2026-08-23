@@ -45,7 +45,7 @@ func TestHandler_Register(t *testing.T) {
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 
-	body := `{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z","comment":"batch finished"}`
+	body := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z","comment":"batch finished"}`
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -62,6 +62,9 @@ func TestHandler_Register(t *testing.T) {
 
 	if entry.ID == "" {
 		t.Fatal("expected generated ID")
+	}
+	if entry.RequestID != "req-1" {
+		t.Errorf("expected request id req-1, got %q", entry.RequestID)
 	}
 	if entry.EmployeeID != "emp-1" {
 		t.Errorf("expected employee emp-1, got %q", entry.EmployeeID)
@@ -96,12 +99,13 @@ func TestHandler_Register_Validation(t *testing.T) {
 		name string
 		body string
 	}{
-		{"missing employee", `{"productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
-		{"missing product", `{"employeeId":"emp-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
-		{"zero quantity", `{"employeeId":"emp-1","productSku":"sku-1","quantity":0,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
-		{"missing workstation", `{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"timestamp":"2026-08-08T10:30:00Z"}`},
-		{"blank workstation", `{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":" ","timestamp":"2026-08-08T10:30:00Z"}`},
-		{"missing timestamp", `{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1"}`},
+		{"missing request id", `{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
+		{"missing employee", `{"requestId":"req-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
+		{"missing product", `{"requestId":"req-1","employeeId":"emp-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
+		{"zero quantity", `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":0,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`},
+		{"missing workstation", `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"timestamp":"2026-08-08T10:30:00Z"}`},
+		{"blank workstation", `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":" ","timestamp":"2026-08-08T10:30:00Z"}`},
+		{"missing timestamp", `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1"}`},
 	}
 
 	store := NewInMemoryStore()
@@ -129,7 +133,7 @@ func TestHandler_Register_MissingReference(t *testing.T) {
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 
-	body := `{"employeeId":"missing","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
+	body := `{"requestId":"req-1","employeeId":"missing","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -137,6 +141,66 @@ func TestHandler_Register_MissingReference(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Register_IdempotentRetry(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(testRegistrationService(t, store))
+	s := fuego.NewServer()
+	fuego.Post(s, "/production-entries", handler.Register)
+	body := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(firstW, firstReq)
+	if firstW.Code != http.StatusOK {
+		t.Fatalf("expected first status 200, got %d: %s", firstW.Code, firstW.Body.String())
+	}
+	var first Entry
+	if err := json.NewDecoder(firstW.Body).Decode(&first); err != nil {
+		t.Fatal(err)
+	}
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(body))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(secondW, secondReq)
+	if secondW.Code != http.StatusOK {
+		t.Fatalf("expected retry status 200, got %d: %s", secondW.Code, secondW.Body.String())
+	}
+	var second Entry
+	if err := json.NewDecoder(secondW.Body).Decode(&second); err != nil {
+		t.Fatal(err)
+	}
+	if second != first {
+		t.Fatalf("expected retry response %#v, got %#v", first, second)
+	}
+}
+
+func TestHandler_Register_RequestIDConflict(t *testing.T) {
+	store := NewInMemoryStore()
+	handler := NewHandler(testRegistrationService(t, store))
+	s := fuego.NewServer()
+	fuego.Post(s, "/production-entries", handler.Register)
+	firstBody := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
+	secondBody := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(firstBody))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(firstW, firstReq)
+	if firstW.Code != http.StatusOK {
+		t.Fatalf("expected first status 200, got %d: %s", firstW.Code, firstW.Body.String())
+	}
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/production-entries", strings.NewReader(secondBody))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(secondW, secondReq)
+	if secondW.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d: %s", secondW.Code, secondW.Body.String())
 	}
 }
 

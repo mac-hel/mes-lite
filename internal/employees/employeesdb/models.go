@@ -49,6 +49,7 @@ type ProductionEntry struct {
 	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
 	Comment     string             `json:"comment"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RequestID   string             `json:"request_id"`
 }
 
 type ProductionOrder struct {

@@ -130,6 +130,42 @@ func TestPostgresStore_SaveDuplicate(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_SaveDuplicateRequestID(t *testing.T) {
+	store := testPostgresStore(t)
+	firstID, err := NewEntryID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := NewEntryWithRequestID(firstID, "request-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondID, err := NewEntryID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewEntryWithRequestID(secondID, "request-1", "emp-1", "sku-1", 12, "ws-1", first.Timestamp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Save(t.Context(), first); err != nil {
+		t.Fatal(err)
+	}
+	err = store.Save(t.Context(), second)
+	if !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("expected ErrRequestConflict, got %v", err)
+	}
+
+	got, err := store.FindByRequestID(t.Context(), "request-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != first {
+		t.Fatalf("expected first entry %#v, got %#v", first, got)
+	}
+}
+
 func TestPostgresStore_FindByID_NotFound(t *testing.T) {
 	store := testPostgresStore(t)
 	id, err := NewEntryID()

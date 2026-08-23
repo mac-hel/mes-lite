@@ -168,7 +168,7 @@ func TestNotFound(t *testing.T) {
 func TestProductionEntriesRoute(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	body := []byte(`{"requestId":"server-production-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	setAuthorization(t, req, tokens, auth.RoleAdmin)
@@ -183,7 +183,7 @@ func TestProductionEntriesRoute(t *testing.T) {
 func TestProductionEntriesRouteRequiresAuthentication(t *testing.T) {
 	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	body := []byte(`{"requestId":"server-production-unauthenticated","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -239,7 +239,7 @@ func TestProductListAllowsLeaderRole(t *testing.T) {
 func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	body := []byte(`{"requestId":"server-production-worker","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	setAuthorization(t, req, tokens, auth.RoleWorker)
@@ -254,7 +254,7 @@ func TestProductionEntriesRouteAllowsWorkerRole(t *testing.T) {
 func TestProductionEntriesReviewAllowsLeaderRole(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	body := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	body := []byte(`{"requestId":"server-production-review-seed","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
 	createReq.Header.Set("Content-Type", "application/json")
 	setAuthorization(t, createReq, tokens, auth.RoleWorker)
@@ -284,6 +284,41 @@ func TestProductionEntriesReviewForbidsWorkerRole(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntriesRouteIsIdempotentByRequestID(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	body := []byte(`{"requestId":"server-production-idempotent","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, firstReq, tokens, auth.RoleWorker)
+	firstW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(firstW, firstReq)
+	if firstW.Code != http.StatusOK {
+		t.Fatalf("expected first status 200, got %d: %s", firstW.Code, firstW.Body.String())
+	}
+	var first production.Entry
+	if err := json.NewDecoder(firstW.Body).Decode(&first); err != nil {
+		t.Fatal(err)
+	}
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	secondReq.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, secondReq, tokens, auth.RoleWorker)
+	secondW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(secondW, secondReq)
+	if secondW.Code != http.StatusOK {
+		t.Fatalf("expected retry status 200, got %d: %s", secondW.Code, secondW.Body.String())
+	}
+	var second production.Entry
+	if err := json.NewDecoder(secondW.Body).Decode(&second); err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("expected retry entry id %q, got %q", first.ID, second.ID)
 	}
 }
 

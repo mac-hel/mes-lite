@@ -25,6 +25,13 @@ func (s *InMemoryStore) Save(_ context.Context, entry Entry) error {
 	if _, ok := s.entries[entry.ID]; ok {
 		return fmt.Errorf("production entry %q: %w", entry.ID, ErrAlreadyExists)
 	}
+	if entry.RequestID != "" {
+		for _, existing := range s.entries {
+			if existing.RequestID == entry.RequestID {
+				return fmt.Errorf("production request id %q: %w", entry.RequestID, ErrRequestConflict)
+			}
+		}
+	}
 	s.entries[entry.ID] = entry
 	return nil
 }
@@ -36,6 +43,16 @@ func (s *InMemoryStore) FindByID(_ context.Context, id string) (Entry, error) {
 		return Entry{}, fmt.Errorf("production entry %q: %w", id, ErrNotFound)
 	}
 	return entry, nil
+}
+
+// FindByRequestID looks up a production entry by idempotency request ID.
+func (s *InMemoryStore) FindByRequestID(_ context.Context, requestID string) (Entry, error) {
+	for _, entry := range s.entries {
+		if entry.RequestID == requestID {
+			return entry, nil
+		}
+	}
+	return Entry{}, fmt.Errorf("production request id %q: %w", requestID, ErrNotFound)
 }
 
 // List returns production entries matching review filters, newest first.

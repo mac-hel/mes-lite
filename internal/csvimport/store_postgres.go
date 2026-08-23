@@ -101,6 +101,7 @@ func createEntry(ctx context.Context, queries *productiondb.Queries, entry produ
 
 	_, err = queries.CreateEntry(ctx, productiondb.CreateEntryParams{
 		ID:          id,
+		RequestID:   entry.RequestID,
 		EmployeeID:  entry.EmployeeID,
 		ProductSku:  entry.ProductSKU,
 		Quantity:    int32(entry.Quantity),

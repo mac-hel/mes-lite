@@ -36,12 +36,63 @@ func newTestService(t *testing.T) (*Service, *InMemoryStore, *employees.InMemory
 
 func validRegisterCommand() RegisterCommand {
 	return RegisterCommand{
+		RequestID:   "request-1",
 		EmployeeID:  "emp-1",
 		ProductSKU:  "sku-1",
 		Quantity:    12,
 		Workstation: "ws-1",
 		Timestamp:   time.Date(2026, 8, 8, 10, 30, 0, 0, time.UTC),
 		Comment:     "batch finished",
+	}
+}
+
+func TestService_Register_IdempotentRetryReturnsExistingEntry(t *testing.T) {
+	service, store, _, _ := newTestService(t)
+	cmd := validRegisterCommand()
+
+	first, err := service.Register(t.Context(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Register(t.Context(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if second != first {
+		t.Fatalf("expected retry to return first entry %#v, got %#v", first, second)
+	}
+	entries, err := store.List(t.Context(), ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one persisted entry, got %d", len(entries))
+	}
+}
+
+func TestService_Register_RequestIDConflict(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+	cmd := validRegisterCommand()
+	if _, err := service.Register(t.Context(), cmd); err != nil {
+		t.Fatal(err)
+	}
+	cmd.Quantity = 13
+
+	_, err := service.Register(t.Context(), cmd)
+	if !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("expected ErrRequestConflict, got %v", err)
+	}
+}
+
+func TestService_Register_RequestIDRequired(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+	cmd := validRegisterCommand()
+	cmd.RequestID = " "
+
+	_, err := service.Register(t.Context(), cmd)
+	if !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected ErrInvalidEntry, got %v", err)
 	}
 }
 

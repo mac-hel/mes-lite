@@ -1,6 +1,7 @@
 -- name: CreateEntry :one
 INSERT INTO production_entries (
     id,
+    request_id,
     employee_id,
     product_sku,
     quantity,
@@ -8,16 +9,21 @@ INSERT INTO production_entries (
     occurred_at,
     comment
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at;
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id;
 
 -- name: GetEntry :one
-SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
 FROM production_entries
 WHERE id = $1;
 
+-- name: GetEntryByRequestID :one
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
+FROM production_entries
+WHERE request_id = $1;
+
 -- name: ListEntries :many
-SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+SELECT id, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at, request_id
 FROM production_entries
 WHERE (@employee_id::text = '' OR employee_id = @employee_id::text)
   AND (@product_sku::text = '' OR product_sku = @product_sku::text)

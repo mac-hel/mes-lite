@@ -32,7 +32,7 @@ func TestSanity_MVPAPIFlow(t *testing.T) {
 		t.Fatal("expected login to return an access token")
 	}
 
-	productionBody := []byte(`{"employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	productionBody := []byte(`{"requestId":"sanity-production-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
 	productionReq := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(productionBody))
 	productionReq.Header.Set("Content-Type", "application/json")
 	productionReq.Header.Set("Authorization", "Bearer "+loginResult.AccessToken)

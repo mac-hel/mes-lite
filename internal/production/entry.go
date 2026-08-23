@@ -19,9 +19,13 @@ var ErrAlreadyExists = errors.New("production entry already exists")
 // ErrInvalidEntry is returned when production entry data breaks domain rules.
 var ErrInvalidEntry = errors.New("invalid production entry")
 
+// ErrRequestConflict is returned when a request ID is reused for different production data.
+var ErrRequestConflict = errors.New("production request id conflict")
+
 // Entry records completed work for one employee and product.
 type Entry struct {
 	ID          string
+	RequestID   string
 	EmployeeID  string
 	ProductSKU  string
 	Quantity    int
@@ -32,8 +36,14 @@ type Entry struct {
 
 // NewEntry creates a valid production entry and normalizes text fields.
 func NewEntry(id, employeeID, productSKU string, quantity int, workstation string, timestamp time.Time, comment string) (Entry, error) {
+	return NewEntryWithRequestID(id, "", employeeID, productSKU, quantity, workstation, timestamp, comment)
+}
+
+// NewEntryWithRequestID creates a valid production entry with an optional idempotency request ID.
+func NewEntryWithRequestID(id, requestID, employeeID, productSKU string, quantity int, workstation string, timestamp time.Time, comment string) (Entry, error) {
 	entry := Entry{
 		ID:          strings.TrimSpace(id),
+		RequestID:   strings.TrimSpace(requestID),
 		EmployeeID:  strings.TrimSpace(employeeID),
 		ProductSKU:  strings.TrimSpace(productSKU),
 		Quantity:    quantity,
@@ -76,6 +86,9 @@ func NewEntryID() (string, error) {
 func (e Entry) Validate() error {
 	if strings.TrimSpace(e.ID) == "" {
 		return fmt.Errorf("id is required: %w", ErrInvalidEntry)
+	}
+	if len(strings.TrimSpace(e.RequestID)) > 128 {
+		return fmt.Errorf("request id must be at most 128 characters: %w", ErrInvalidEntry)
 	}
 	if strings.TrimSpace(e.EmployeeID) == "" {
 		return fmt.Errorf("employee id is required: %w", ErrInvalidEntry)

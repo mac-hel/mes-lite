@@ -72,6 +72,11 @@ Should production be managed separately, but in single system?
 - How organize development and deploys?
 - For cloud-based application - single domain with subdomains (e.g. companyA.meslite.app) or separate domain (e.g. companyA.app)?
 
+## remove protections for existing data (in reality no data exist yet)
+e.g. remove `request_id <> ''` from `production_entries.request_id` index
+remove `NOT VALID` from migrations/0004_add_production_reference_foreign_keys.sql
+check other migrations
+
 
 
 

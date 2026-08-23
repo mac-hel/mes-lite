@@ -120,6 +120,7 @@ func invalidProductionListOptionsError(err error) fuego.BadRequestError {
 
 // RegisterProductionRequest is the expected JSON body for registering completed production.
 type RegisterProductionRequest struct {
+	RequestID   string    `json:"requestId"   validate:"required"`
 	EmployeeID  string    `json:"employeeId"  validate:"required"`
 	ProductSKU  string    `json:"productSku"  validate:"required"`
 	Quantity    int       `json:"quantity"    validate:"required,min=1"`
@@ -137,6 +138,12 @@ func (h *Handler) Register(c fuego.ContextWithBody[RegisterProductionRequest]) (
 
 	entry, err := h.registrar.Register(c.Context(), RegisterCommand(body))
 	if err != nil {
+		if errors.Is(err, ErrRequestConflict) {
+			return Entry{}, fuego.ConflictError{
+				Err:    err,
+				Detail: err.Error(),
+			}
+		}
 		if errors.Is(err, ErrAlreadyExists) {
 			return Entry{}, fuego.ConflictError{
 				Err:    err,

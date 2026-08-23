@@ -2,8 +2,23 @@
 
 `defer` schedules a call for execution when the surrounding function returns.
 
-Common uses:
+```go
+defer fmt.Println(x)        // captures current value of `x` (args evaluated on `defer` statement)
+defer func() {              // but Closure receives future value (if it change)
+    fmt.Println(x)
+}()
+defer iWillRunFirst()       // deferred functions execute in **LIFO** order.
+```
 
+Deferred calls **run**:
+* on normal return
+* while unwinding a panic
+
+They do **not** run when the process terminates directly through mechanisms:
+* `os.Exit`
+* `log.Fatal` (which exits the process)
+
+Common uses:
 ```go
 file.Close()
 mu.Unlock()
@@ -11,70 +26,68 @@ cancel()
 rows.Close()
 ```
 
-Deferred calls run:
-
-* on normal return
-* while unwinding a panic
-
-They do **not** run when the process terminates directly through mechanisms such as `os.Exit`; consequently `log.Fatal`, which exits the process, also bypasses ordinary deferred cleanup.
-
-Arguments to a deferred call are evaluated when the `defer` statement executes:
-
-```go
-defer fmt.Println(x)
-```
-
-captures the current value of `x`.
-
-Deferred functions execute in **LIFO** order.
-
 ---
 
 # Exit
 
-- `os.Exit` does not trigger deferred functions
+`os.Exit` / `log.Fatal` terminates immediately
+does not trigger deferred functions
 
 ---
 
 # Context
 
-`context.Context`
+Context carries **request lifetime information** down a call tree.
 
-Context carries:
+Contexts form a tree.
+```go
+ctx
+ ├── database call
+ ├── HTTP call
+ └── another operation
+```
+If the parent request is cancelled, children should eventually stop too.
+
+## What belongs in `context.Context`?
 * cancellation
 * deadlines
-* request-scoped values
+* request-scoped values: infra metadata, tracing/spans, correlation/request IDs, and sometimes authentication identity metadata
+* **NOT** business data, domain params (amount, orderID), config (db, feature flags)
 
-Typical API:
+Use typed, preferably unexported keys:
 ```go
-func Fetch(ctx context.Context, id string) (User, error)
+type contextKey struct{}
+ctx = context.WithValue(ctx, contextKey{}, value)
 ```
 
----
+## context propagation
+```go
+ctx, cancel := context.WithTimeout(parent, 2*time.Second)
+defer cancel()
+
+db.QueryContext(ctx, query)                             // same ctx to DB
+http.NewRequestWithContext(ctx, method, url, body)      // same ctx to downstream HTTP request
+
+```
+Also, do not pass `nil` context. Use: `context.Background()` or a propagated parent context.
 
 ## Context as first parameter is the established Go convention, that provides:
 
 ### 1. Immediate visibility
-
 A reader can instantly see that the operation participates in cancellation/deadline propagation.
 
 ### 2. Consistent propagation
-
 Call chains naturally look like:
-
 ```go
 handler(ctx)
     -> service.Get(ctx)
         -> repo.Get(ctx)
             -> db.QueryContext(ctx)
 ```
-
 The same cancellation/deadline propagates through API boundaries.
 
 ### 3. Cancellation
-
 If the HTTP client disconnects:
-
 ```text
 HTTP request context cancelled
     ↓
@@ -82,16 +95,13 @@ service operation cancelled
     ↓
 database operation cancelled
 ```
-
 assuming downstream APIs respect the context.
 
 ### 4. Deadlines
-
 ```go
 ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 defer cancel()
 ```
-
 Downstream work receives the remaining deadline.
 
 ### 5. Request-scoped values
@@ -153,12 +163,38 @@ Typed error: `type MyErr struct { Field string; Err error }`
 
 ## Wrapping
 **wrap** to add context at abstraction boundaries, `%w` preserves the error chain:
-`fmt.Errorf("load user %q: %w", id, err)`
+```go
+fmt.Errorf("load user %q: %w", id, err)
+```
 
 **Inspect** (is recursive), prefer `errors.Is`/`errors.As` over `equality` or `type assertions` when errors may be wrapped:
-`if errors.Is(err, sql.ErrNoRows) { ... }`
-`var e *MyErr; if errors.As(err, &e) { ... }`
+```go
+if errors.Is(err, sql.ErrNoRows) { ... }
+var e *MyErr; if errors.As(err, &e) { ... }
+```
 
 ## Error ownership
 - avoid repeatedly wrapping with meaningless text
 - do not log and return error at every layer; that often causes duplicate logs
+    - usually one sufficiently high boundary owns the final logging
+> Handle an error when you can recover from it or translate it meaningfully. Otherwise propagate it.
+
+A good layered flow might look like:
+```text
+PostgreSQL
+    │
+    │ sql.ErrNoRows
+    ▼
+Repository adapter
+    │
+    │ domain.ErrOrderNotFound
+    ▼
+Application use case
+    │
+    │ "load order abc: order not found"
+    ▼
+HTTP handler
+    │
+    └── HTTP 404
+```
+Each boundary translates into the vocabulary of the layer above it.
