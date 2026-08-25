@@ -80,7 +80,7 @@ db-sql:
 	docker compose exec -T postgres psql -U meslite -d meslite -c "select version_id, is_applied from goose_db_version order by id;"
 
 teach-continue:
-	opencode -s ses_00aa2136dffePS56arJLR3rM1w
+	opencode -s ses_fd78892b4ffegwLCmc7owk6Uvy
 
 # peak hours: 3-6 i 9-12
 opencode-ds-r:

@@ -10,11 +10,17 @@ import (
 
 	"github.com/go-fuego/fuego"
 
+	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
-func testRegistrationService(t *testing.T, store Store) *Service {
+type testProductionStore interface {
+	EntryStore
+	CorrectionStore
+}
+
+func testRegistrationService(t *testing.T, store testProductionStore) *Service {
 	t.Helper()
 
 	empStore := employees.NewInMemoryStore()
@@ -35,12 +41,13 @@ func testRegistrationService(t *testing.T, store Store) *Service {
 		t.Fatal(err)
 	}
 
-	return NewService(store, empStore, prodStore)
+	return NewService(store, store, empStore, prodStore)
 }
 
 func TestHandler_Register(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
@@ -109,7 +116,8 @@ func TestHandler_Register_Validation(t *testing.T) {
 	}
 
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 
@@ -129,7 +137,8 @@ func TestHandler_Register_Validation(t *testing.T) {
 
 func TestHandler_Register_MissingReference(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 
@@ -146,7 +155,8 @@ func TestHandler_Register_MissingReference(t *testing.T) {
 
 func TestHandler_Register_IdempotentRetry(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 	body := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
@@ -181,7 +191,8 @@ func TestHandler_Register_IdempotentRetry(t *testing.T) {
 
 func TestHandler_Register_RequestIDConflict(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Post(s, "/production-entries", handler.Register)
 	firstBody := `{"requestId":"req-1","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`
@@ -206,7 +217,8 @@ func TestHandler_Register_RequestIDConflict(t *testing.T) {
 
 func TestHandler_List(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Get(s, "/production-entries", handler.List)
 
@@ -241,7 +253,8 @@ func TestHandler_List(t *testing.T) {
 
 func TestHandler_List_InvalidQuery(t *testing.T) {
 	store := NewInMemoryStore()
-	handler := NewHandler(testRegistrationService(t, store))
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
 	s := fuego.NewServer()
 	fuego.Get(s, "/production-entries", handler.List)
 
@@ -251,6 +264,60 @@ func TestHandler_List_InvalidQuery(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Correct(t *testing.T) {
+	store := NewInMemoryStore()
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
+	entry := mustProductionEntry(t, "00000000-0000-4000-8000-000000000021", "emp-1", "sku-1", 12, "ws-1", "2026-08-08T10:30:00Z")
+	if err := store.Save(t.Context(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	s := fuego.NewServer()
+	fuego.Post(s, "/production-entries/{id}/corrections", handler.Correct, fuego.OptionMiddleware(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.ContextWithPrincipal(r.Context(), auth.Principal{UserID: "manager-1", Role: auth.RoleManager})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}))
+	body := `{"reason":"quantity typo","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-2","timestamp":"2026-08-08T11:30:00Z","comment":"corrected"}`
+	req := httptest.NewRequest(http.MethodPost, "/production-entries/"+entry.ID+"/corrections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var correction Correction
+	if err := json.NewDecoder(w.Body).Decode(&correction); err != nil {
+		t.Fatal(err)
+	}
+	if correction.ActorUserID != "manager-1" {
+		t.Fatalf("expected actor manager-1, got %q", correction.ActorUserID)
+	}
+	if correction.Quantity != 13 {
+		t.Fatalf("expected corrected quantity 13, got %d", correction.Quantity)
+	}
+}
+
+func TestHandler_Correct_RequiresPrincipal(t *testing.T) {
+	store := NewInMemoryStore()
+	service := testRegistrationService(t, store)
+	handler := NewHandler(service, service)
+	s := fuego.NewServer()
+	fuego.Post(s, "/production-entries/{id}/corrections", handler.Correct)
+	body := `{"reason":"quantity typo","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-2","timestamp":"2026-08-08T11:30:00Z"}`
+	req := httptest.NewRequest(http.MethodPost, "/production-entries/missing/corrections", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

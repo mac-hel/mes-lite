@@ -83,8 +83,8 @@ func run() int {
 	prodHandler := products.NewHandler(prodStore)
 
 	productionStore := production.NewPostgresStore(db)
-	productionService := production.NewService(productionStore, empStore, prodStore)
-	productionHandler := production.NewHandler(productionService)
+	productionService := production.NewService(productionStore, productionStore, empStore, prodStore)
+	productionHandler := production.NewHandler(productionService, productionService)
 
 	ordersStore := orders.NewPostgresStore(db)
 	ordersService := orders.NewService(ordersStore, empStore, prodStore)

@@ -54,7 +54,7 @@ func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenMan
 		t.Fatal(err)
 	}
 
-	productionService := production.NewService(productionStore, empStore, prodStore)
+	productionService := production.NewService(productionStore, productionStore, empStore, prodStore)
 	ordersStore := orders.NewInMemoryStore()
 	ordersService := orders.NewService(ordersStore, empStore, prodStore)
 	reportingStore := reporting.NewInMemoryStoreWithReports(
@@ -99,7 +99,7 @@ func testHandlers(t *testing.T) (*auth.Handler, *auth.Middleware, *auth.TokenMan
 		}},
 	)
 
-	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService), orders.NewHandler(ordersService), reporting.NewHandler(reportingStore)
+	return auth.NewHandler(auth.NewService(authStore, tokens)), auth.NewMiddleware(tokens), tokens, employees.NewHandler(empStore), products.NewHandler(prodStore), production.NewHandler(productionService, productionService), orders.NewHandler(ordersService), reporting.NewHandler(reportingStore)
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -319,6 +319,69 @@ func TestProductionEntriesRouteIsIdempotentByRequestID(t *testing.T) {
 	}
 	if second.ID != first.ID {
 		t.Fatalf("expected retry entry id %q, got %q", first.ID, second.ID)
+	}
+}
+
+func TestProductionEntryCorrectionsRouteAllowsLeaderRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	entryID := createProductionEntry(t, s, tokens)
+	body := []byte(`{"reason":"quantity typo","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-2","timestamp":"2026-08-08T11:30:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-entries/"+entryID+"/corrections", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var correction production.Correction
+	if err := json.NewDecoder(w.Body).Decode(&correction); err != nil {
+		t.Fatal(err)
+	}
+	if correction.ActorUserID != "user-1" {
+		t.Fatalf("expected actor user-1, got %q", correction.ActorUserID)
+	}
+}
+
+func TestProductionEntryCorrectionsRouteForbidsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	entryID := createProductionEntry(t, s, tokens)
+	body := []byte(`{"reason":"quantity typo","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-2","timestamp":"2026-08-08T11:30:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-entries/"+entryID+"/corrections", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProductionEntryCorrectionsRouteListsHistory(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	entryID := createProductionEntry(t, s, tokens)
+	body := []byte(`{"reason":"quantity typo","employeeId":"emp-1","productSku":"sku-1","quantity":13,"workstation":"ws-2","timestamp":"2026-08-08T11:30:00Z"}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/production-entries/"+entryID+"/corrections", bytes.NewReader(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, createReq, tokens, auth.RoleManager)
+	createW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusOK {
+		t.Fatalf("expected correction status 200, got %d: %s", createW.Code, createW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/production-entries/"+entryID+"/corrections", nil)
+	setAuthorization(t, req, tokens, auth.RoleLeader)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -653,6 +716,24 @@ func mustTime(t *testing.T, value string) time.Time {
 		t.Fatal(err)
 	}
 	return parsed
+}
+
+func createProductionEntry(t *testing.T, s *Server, tokens *auth.TokenManager) string {
+	t.Helper()
+	body := []byte(`{"requestId":"production-correction-seed","employeeId":"emp-1","productSku":"sku-1","quantity":12,"workstation":"ws-1","timestamp":"2026-08-08T10:30:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/production-entries", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var created production.Entry
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	return created.ID
 }
 
 func createProductionOrder(t *testing.T, s *Server, tokens *auth.TokenManager) string {

@@ -11,6 +11,69 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createCorrection = `-- name: CreateCorrection :one
+INSERT INTO production_entry_corrections (
+    id,
+    entry_id,
+    actor_user_id,
+    reason,
+    employee_id,
+    product_sku,
+    quantity,
+    workstation,
+    occurred_at,
+    comment,
+    created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, entry_id, actor_user_id, reason, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+`
+
+type CreateCorrectionParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	EntryID     pgtype.UUID        `json:"entry_id"`
+	ActorUserID string             `json:"actor_user_id"`
+	Reason      string             `json:"reason"`
+	EmployeeID  string             `json:"employee_id"`
+	ProductSku  string             `json:"product_sku"`
+	Quantity    int32              `json:"quantity"`
+	Workstation string             `json:"workstation"`
+	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
+	Comment     string             `json:"comment"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateCorrection(ctx context.Context, arg CreateCorrectionParams) (ProductionEntryCorrection, error) {
+	row := q.db.QueryRow(ctx, createCorrection,
+		arg.ID,
+		arg.EntryID,
+		arg.ActorUserID,
+		arg.Reason,
+		arg.EmployeeID,
+		arg.ProductSku,
+		arg.Quantity,
+		arg.Workstation,
+		arg.OccurredAt,
+		arg.Comment,
+		arg.CreatedAt,
+	)
+	var i ProductionEntryCorrection
+	err := row.Scan(
+		&i.ID,
+		&i.EntryID,
+		&i.ActorUserID,
+		&i.Reason,
+		&i.EmployeeID,
+		&i.ProductSku,
+		&i.Quantity,
+		&i.Workstation,
+		&i.OccurredAt,
+		&i.Comment,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO production_entries (
     id,
@@ -107,6 +170,45 @@ func (q *Queries) GetEntryByRequestID(ctx context.Context, requestID string) (Pr
 		&i.RequestID,
 	)
 	return i, err
+}
+
+const listCorrections = `-- name: ListCorrections :many
+SELECT id, entry_id, actor_user_id, reason, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+FROM production_entry_corrections
+WHERE entry_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListCorrections(ctx context.Context, entryID pgtype.UUID) ([]ProductionEntryCorrection, error) {
+	rows, err := q.db.Query(ctx, listCorrections, entryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProductionEntryCorrection{}
+	for rows.Next() {
+		var i ProductionEntryCorrection
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntryID,
+			&i.ActorUserID,
+			&i.Reason,
+			&i.EmployeeID,
+			&i.ProductSku,
+			&i.Quantity,
+			&i.Workstation,
+			&i.OccurredAt,
+			&i.Comment,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEntries = `-- name: ListEntries :many

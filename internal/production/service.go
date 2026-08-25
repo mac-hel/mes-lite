@@ -43,19 +43,34 @@ type RegisterCommand struct {
 	Comment     string
 }
 
+// CorrectEntryCommand contains the replacement values and audit data for a correction.
+type CorrectEntryCommand struct {
+	EntryID     string
+	ActorUserID string
+	Reason      string
+	EmployeeID  string
+	ProductSKU  string
+	Quantity    int
+	Workstation string
+	Timestamp   time.Time
+	Comment     string
+}
+
 // Service coordinates production registration business rules.
 type Service struct {
-	entries   Store
-	employees EmployeeLookup
-	products  ProductLookup
+	entries     EntryStore
+	corrections CorrectionStore
+	employees   EmployeeLookup
+	products    ProductLookup
 }
 
 // NewService creates a production application service.
-func NewService(entries Store, employees EmployeeLookup, products ProductLookup) *Service {
+func NewService(entries EntryStore, corrections CorrectionStore, employees EmployeeLookup, products ProductLookup) *Service {
 	return &Service{
-		entries:   entries,
-		employees: employees,
-		products:  products,
+		entries:     entries,
+		corrections: corrections,
+		employees:   employees,
+		products:    products,
 	}
 }
 
@@ -125,6 +140,44 @@ func sameProductionRequest(a, b Entry) bool {
 // List returns production entries for review workflows.
 func (s *Service) List(ctx context.Context, opts ListOptions) ([]Entry, error) {
 	return s.entries.List(ctx, opts)
+}
+
+// CorrectEntry appends a correction without overwriting the original production entry.
+func (s *Service) CorrectEntry(ctx context.Context, cmd CorrectEntryCommand) (Correction, error) {
+	if _, err := s.entries.FindByID(ctx, cmd.EntryID); err != nil {
+		return Correction{}, err
+	}
+
+	id, err := NewEntryID()
+	if err != nil {
+		return Correction{}, err
+	}
+	correction, err := NewCorrection(id, cmd.EntryID, cmd.ActorUserID, cmd.Reason, cmd.EmployeeID, cmd.ProductSKU, cmd.Quantity, cmd.Workstation, cmd.Timestamp, cmd.Comment)
+	if err != nil {
+		return Correction{}, err
+	}
+	correction.CreatedAt = time.Now().UTC()
+
+	if err := s.validateEmployee(ctx, correction.EmployeeID); err != nil {
+		return Correction{}, err
+	}
+	if err := s.validateProduct(ctx, correction.ProductSKU); err != nil {
+		return Correction{}, err
+	}
+
+	if err := s.corrections.SaveCorrection(ctx, correction); err != nil {
+		return Correction{}, err
+	}
+
+	return correction, nil
+}
+
+// ListCorrections returns append-only correction history for a production entry.
+func (s *Service) ListCorrections(ctx context.Context, entryID string) ([]Correction, error) {
+	if _, err := s.entries.FindByID(ctx, entryID); err != nil {
+		return nil, err
+	}
+	return s.corrections.ListCorrections(ctx, entryID)
 }
 
 func (s *Service) validateEmployee(ctx context.Context, id string) error {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -118,6 +119,63 @@ func (s *PostgresStore) List(ctx context.Context, opts ListOptions) ([]Entry, er
 	return entries, nil
 }
 
+// SaveCorrection stores an append-only production-entry correction in PostgreSQL.
+func (s *PostgresStore) SaveCorrection(ctx context.Context, correction Correction) error {
+	if err := correction.Validate(); err != nil {
+		return err
+	}
+	id, err := parseUUID(correction.ID)
+	if err != nil {
+		return err
+	}
+	entryID, err := parseUUID(correction.EntryID)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.queries.CreateCorrection(ctx, productiondb.CreateCorrectionParams{
+		ID:          id,
+		EntryID:     entryID,
+		ActorUserID: correction.ActorUserID,
+		Reason:      correction.Reason,
+		EmployeeID:  correction.EmployeeID,
+		ProductSku:  correction.ProductSKU,
+		Quantity:    int32(correction.Quantity),
+		Workstation: correction.Workstation,
+		OccurredAt:  pgtype.Timestamptz{Time: correction.Timestamp, Valid: true},
+		Comment:     correction.Comment,
+		CreatedAt:   pgtype.Timestamptz{Time: correction.CreatedAt, Valid: true},
+	})
+	if err != nil {
+		return mapCorrectionPostgresError(correction.ID, err)
+	}
+
+	return nil
+}
+
+// ListCorrections returns correction history for a production entry from PostgreSQL.
+func (s *PostgresStore) ListCorrections(ctx context.Context, entryID string) ([]Correction, error) {
+	uuid, err := parseUUID(entryID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.ListCorrections(ctx, uuid)
+	if err != nil {
+		return nil, err
+	}
+	corrections := make([]Correction, 0, len(rows))
+	for _, row := range rows {
+		correction, err := correctionFromDB(row)
+		if err != nil {
+			return nil, err
+		}
+		corrections = append(corrections, correction)
+	}
+
+	return corrections, nil
+}
+
 func mapPostgresError(id string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -135,6 +193,22 @@ func mapPostgresError(id string, err error) error {
 	return err
 }
 
+func mapCorrectionPostgresError(id string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch postgres.SQLState(pgErr.Code) {
+		case postgres.UniqueViolation:
+			return fmt.Errorf("production correction %q: %w", id, ErrAlreadyExists)
+		case postgres.ForeignKeyViolation:
+			return fmt.Errorf("production correction %q: %w", id, ErrNotFound)
+		case postgres.CheckViolation, postgres.NotNullViolation, postgres.InvalidTextValue:
+			return fmt.Errorf("production correction %q: %w", id, ErrInvalidCorrection)
+		}
+	}
+
+	return err
+}
+
 func entryFromDB(entry productiondb.ProductionEntry) (Entry, error) {
 	return NewEntryWithRequestID(
 		uuidString(entry.ID),
@@ -146,6 +220,34 @@ func entryFromDB(entry productiondb.ProductionEntry) (Entry, error) {
 		entry.OccurredAt.Time,
 		entry.Comment,
 	)
+}
+
+func correctionFromDB(correction productiondb.ProductionEntryCorrection) (Correction, error) {
+	createdAt := timeFromPg(correction.CreatedAt)
+	result, err := NewCorrection(
+		uuidString(correction.ID),
+		uuidString(correction.EntryID),
+		correction.ActorUserID,
+		correction.Reason,
+		correction.EmployeeID,
+		correction.ProductSku,
+		int(correction.Quantity),
+		correction.Workstation,
+		correction.OccurredAt.Time,
+		correction.Comment,
+	)
+	if err != nil {
+		return Correction{}, err
+	}
+	result.CreatedAt = createdAt
+	return result, nil
+}
+
+func timeFromPg(value pgtype.Timestamptz) time.Time {
+	if !value.Valid {
+		return time.Time{}
+	}
+	return value.Time.UTC()
 }
 
 func parseUUID(id string) (pgtype.UUID, error) {

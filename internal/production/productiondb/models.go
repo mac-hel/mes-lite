@@ -52,6 +52,20 @@ type ProductionEntry struct {
 	RequestID   string             `json:"request_id"`
 }
 
+type ProductionEntryCorrection struct {
+	ID          pgtype.UUID        `json:"id"`
+	EntryID     pgtype.UUID        `json:"entry_id"`
+	ActorUserID string             `json:"actor_user_id"`
+	Reason      string             `json:"reason"`
+	EmployeeID  string             `json:"employee_id"`
+	ProductSku  string             `json:"product_sku"`
+	Quantity    int32              `json:"quantity"`
+	Workstation string             `json:"workstation"`
+	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
+	Comment     string             `json:"comment"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProductionOrder struct {
 	ID        string             `json:"id"`
 	Status    string             `json:"status"`

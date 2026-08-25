@@ -2,7 +2,463 @@
 
 The common theme is that Go tries to make **ownership, dependencies, control flow, and boundaries visible in the code**. It has relatively few language mechanisms, but those mechanisms interact in important ways.
 
+# Comparison
 
+In Go, comparison depends on whether a type is **comparable**. Some values support `==` and `!=` directly; others require element-by-element comparison or helper functions.
+
+### Quick reference
+
+| Type                             | `==` / `!=`? | Notes                         |
+| -------------------------------- | ------------ | ----------------------------- |
+| integers, floats, strings, bools | ✅            | Normal comparison             |
+| pointers                         | ✅            | Compares addresses            |
+| channels                         | ✅            | Same channel or not           |
+| arrays                           | ✅            | If element type is comparable |
+| structs                          | ✅            | If every field is comparable  |
+| slices                           | ❌            | Can only compare with `nil`   |
+| maps                             | ❌            | Can only compare with `nil`   |
+| functions                        | ❌            | Can only compare with `nil`   |
+| interfaces                       | ⚠️           | Depends on dynamic value      |
+
+## 1. Primitive values
+
+```go
+a := 10
+b := 20
+
+fmt.Println(a == b) // false
+fmt.Println(a != b) // true
+fmt.Println(a < b)  // true
+```
+
+Strings work similarly:
+
+```go
+fmt.Println("abc" == "abc") // true
+fmt.Println("abc" < "xyz")  // true
+```
+
+---
+
+## 2. Structs
+
+Structs can be compared directly **if every field is comparable**.
+
+```go
+type User struct {
+    ID   int
+    Name string
+}
+
+a := User{ID: 1, Name: "Alice"}
+b := User{ID: 1, Name: "Alice"}
+
+fmt.Println(a == b) // true
+```
+
+Go compares every field.
+
+But this doesn't compile:
+
+```go
+type User struct {
+    ID   int
+    Tags []string
+}
+
+a := User{ID: 1}
+b := User{ID: 1}
+
+// a == b // compile error
+```
+
+Because `[]string` is a slice, and slices aren't comparable.
+
+---
+
+## 3. Arrays
+
+Arrays are comparable if their element type is comparable.
+
+```go
+a := [3]int{1, 2, 3}
+b := [3]int{1, 2, 3}
+
+fmt.Println(a == b) // true
+```
+
+Nested arrays work too:
+
+```go
+a := [2][2]int{{1, 2}, {3, 4}}
+b := [2][2]int{{1, 2}, {3, 4}}
+
+fmt.Println(a == b) // true
+```
+
+Note that arrays and slices are different here:
+
+```go
+[3]int{1, 2, 3}  // comparable
+[]int{1, 2, 3}   // not comparable
+```
+
+---
+
+## 4. Slices
+
+You cannot use `==` between two slices.
+
+```go
+a := []int{1, 2, 3}
+b := []int{1, 2, 3}
+
+// fmt.Println(a == b) // compile error
+```
+
+A slice may only be compared to `nil`:
+
+```go
+if a == nil {
+    fmt.Println("nil slice")
+}
+```
+
+For element equality, modern Go has `slices.Equal`:
+
+```go
+import "slices"
+
+a := []int{1, 2, 3}
+b := []int{1, 2, 3}
+
+fmt.Println(slices.Equal(a, b)) // true
+```
+
+For custom comparison:
+
+```go
+a := []string{"HELLO", "WORLD"}
+b := []string{"hello", "world"}
+
+equal := slices.EqualFunc(a, b, strings.EqualFold)
+
+fmt.Println(equal) // true
+```
+
+One important distinction:
+
+```go
+var a []int = nil
+b := []int{}
+
+fmt.Println(slices.Equal(a, b)) // true
+```
+
+`slices.Equal` treats nil and empty slices as having the same contents.
+
+---
+
+## 5. Maps
+
+Maps cannot be compared to each other with `==`.
+
+```go
+a := map[string]int{"x": 1}
+b := map[string]int{"x": 1}
+
+// fmt.Println(a == b) // compile error
+```
+
+They can only be compared against `nil`:
+
+```go
+if a == nil {
+    // ...
+}
+```
+
+Use `maps.Equal`:
+
+```go
+import "maps"
+
+a := map[string]int{
+    "foo": 10,
+    "bar": 20,
+}
+
+b := map[string]int{
+    "bar": 20,
+    "foo": 10,
+}
+
+fmt.Println(maps.Equal(a, b)) // true
+```
+
+Map iteration order doesn't matter.
+
+For custom comparison:
+
+```go
+maps.EqualFunc(a, b, func(x, y SomeType) bool {
+    return ...
+})
+```
+
+---
+
+## 6. Pointers
+
+Pointers are comparable:
+
+```go
+x := 10
+y := 10
+
+a := &x
+b := &x
+c := &y
+
+fmt.Println(a == b) // true
+fmt.Println(a == c) // false
+```
+
+This compares **addresses**, not pointed-to contents.
+
+If you want contents:
+
+```go
+fmt.Println(*a == *c) // true
+```
+
+---
+
+## 7. Functions
+
+Functions aren't comparable with one another.
+
+```go
+f1 := func() {}
+f2 := func() {}
+
+// f1 == f2 // compile error
+```
+
+You can only check whether one is nil:
+
+```go
+if f1 == nil {
+    // ...
+}
+```
+
+---
+
+## 8. Interfaces
+
+Interfaces are a slightly tricky case.
+
+This works:
+
+```go
+var a any = 10
+var b any = 10
+
+fmt.Println(a == b) // true
+```
+
+But the dynamic value must itself be comparable.
+
+For example:
+
+```go
+var a any = []int{1, 2}
+var b any = []int{1, 2}
+
+fmt.Println(a == b)
+```
+
+This **panics at runtime**, because the dynamic type is `[]int`, which isn't comparable.
+
+So interface comparison can be more dangerous than normal statically typed comparison.
+
+---
+
+## 9. Deep/nested values
+
+For arbitrary nested values, there's also:
+
+```go
+reflect.DeepEqual(a, b)
+```
+
+Example:
+
+```go
+type User struct {
+    Name string
+    Tags []string
+}
+
+a := User{
+    Name: "Alice",
+    Tags: []string{"go", "linux"},
+}
+
+b := User{
+    Name: "Alice",
+    Tags: []string{"go", "linux"},
+}
+
+fmt.Println(reflect.DeepEqual(a, b)) // true
+```
+
+But I wouldn't default to `reflect.DeepEqual` for ordinary application code. Explicit comparisons or `slices.Equal` / `maps.Equal` are usually clearer.
+
+It also has semantics you should understand before relying on it—for example, nil and empty slices are considered different:
+
+```go
+var a []int = nil
+b := []int{}
+
+fmt.Println(reflect.DeepEqual(a, b)) // false
+fmt.Println(slices.Equal(a, b))      // true
+```
+
+---
+
+## 10. Custom struct comparison
+
+For more complex domain types, an `Equal` method is often the cleanest solution:
+
+```go
+type User struct {
+    ID   int
+    Name string
+    Tags []string
+}
+
+func (u User) Equal(other User) bool {
+    return u.ID == other.ID &&
+        u.Name == other.Name &&
+        slices.Equal(u.Tags, other.Tags)
+}
+```
+
+Then:
+
+```go
+if user1.Equal(user2) {
+    // same according to your application's definition
+}
+```
+
+This is particularly useful because "equal" doesn't always mean every internal field is identical.
+
+For example:
+
+```go
+type Person struct {
+    ID          int
+    Name        string
+    CachedValue string
+}
+```
+
+Your logical equality might intentionally ignore `CachedValue`.
+
+---
+
+## 11. Generic code and `comparable`
+
+Go has a built-in `comparable` constraint for generic types:
+
+```go
+func Equal[T comparable](a, b T) bool {
+    return a == b
+}
+```
+
+Works:
+
+```go
+Equal(10, 20)
+Equal("foo", "bar")
+
+Equal(
+    [2]int{1, 2},
+    [2]int{1, 2},
+)
+```
+
+Won't compile:
+
+```go
+Equal(
+    []int{1, 2},
+    []int{1, 2},
+)
+```
+
+because slices aren't comparable.
+
+A common use of `comparable` is map keys:
+
+```go
+func ContainsKey[K comparable, V any](m map[K]V, key K) bool {
+    _, ok := m[key]
+    return ok
+}
+```
+
+Map keys must be comparable for exactly this reason.
+
+### The useful mental model
+
+Think recursively:
+
+```text
+int/string/bool/etc.
+        ↓
+    comparable
+
+[10]int
+        ↓
+elements comparable
+        ↓
+array comparable
+
+struct {
+    ID int
+    Name string
+}
+        ↓
+all fields comparable
+        ↓
+struct comparable
+```
+
+But:
+
+```text
+[]int
+   ↓
+slice
+   ↓
+NOT comparable
+
+struct {
+    ID   int
+    Tags []string
+}
+          ↑
+     not comparable
+          ↓
+whole struct NOT comparable
+```
+
+So for day-to-day Go code, the pattern is: use `==` for comparable values, `slices.Equal` for slices, `maps.Equal` for maps, and an explicit `Equal` method when your type has more complicated equality semantics.
 
 
 ---

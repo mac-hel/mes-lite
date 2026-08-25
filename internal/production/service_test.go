@@ -31,7 +31,7 @@ func newTestService(t *testing.T) (*Service, *InMemoryStore, *employees.InMemory
 		t.Fatal(err)
 	}
 
-	return NewService(entryStore, empStore, prodStore), entryStore, empStore, prodStore
+	return NewService(entryStore, entryStore, empStore, prodStore), entryStore, empStore, prodStore
 }
 
 func validRegisterCommand() RegisterCommand {
@@ -187,5 +187,96 @@ func TestService_Register_InvalidEntry(t *testing.T) {
 	_, err := service.Register(t.Context(), cmd)
 	if !errors.Is(err, ErrInvalidEntry) {
 		t.Fatalf("expected ErrInvalidEntry, got %v", err)
+	}
+}
+
+func TestService_CorrectEntry_AppendsCorrectionWithoutChangingOriginal(t *testing.T) {
+	service, store, _, _ := newTestService(t)
+	entry, err := service.Register(t.Context(), validRegisterCommand())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	correction, err := service.CorrectEntry(t.Context(), CorrectEntryCommand{
+		EntryID:     entry.ID,
+		ActorUserID: "manager-1",
+		Reason:      "quantity typo",
+		EmployeeID:  "emp-1",
+		ProductSKU:  "sku-1",
+		Quantity:    13,
+		Workstation: "ws-2",
+		Timestamp:   entry.Timestamp.Add(time.Hour),
+		Comment:     "corrected quantity",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if correction.ID == "" {
+		t.Fatal("expected generated correction ID")
+	}
+	if correction.ActorUserID != "manager-1" {
+		t.Fatalf("expected actor manager-1, got %q", correction.ActorUserID)
+	}
+	if correction.Reason != "quantity typo" {
+		t.Fatalf("expected correction reason, got %q", correction.Reason)
+	}
+
+	stored, err := store.FindByID(t.Context(), entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored != entry {
+		t.Fatalf("expected original entry unchanged %#v, got %#v", entry, stored)
+	}
+
+	corrections, err := service.ListCorrections(t.Context(), entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(corrections) != 1 {
+		t.Fatalf("expected one correction, got %d", len(corrections))
+	}
+	if corrections[0] != correction {
+		t.Fatalf("expected correction %#v, got %#v", correction, corrections[0])
+	}
+}
+
+func TestService_CorrectEntry_RequiresReason(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+	entry, err := service.Register(t.Context(), validRegisterCommand())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.CorrectEntry(t.Context(), CorrectEntryCommand{
+		EntryID:     entry.ID,
+		ActorUserID: "manager-1",
+		Reason:      " ",
+		EmployeeID:  "emp-1",
+		ProductSKU:  "sku-1",
+		Quantity:    13,
+		Workstation: "ws-2",
+		Timestamp:   entry.Timestamp,
+	})
+	if !errors.Is(err, ErrInvalidCorrection) {
+		t.Fatalf("expected ErrInvalidCorrection, got %v", err)
+	}
+}
+
+func TestService_CorrectEntry_MissingEntry(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+
+	_, err := service.CorrectEntry(t.Context(), CorrectEntryCommand{
+		EntryID:     "missing",
+		ActorUserID: "manager-1",
+		Reason:      "fix typo",
+		EmployeeID:  "emp-1",
+		ProductSKU:  "sku-1",
+		Quantity:    13,
+		Workstation: "ws-2",
+		Timestamp:   time.Now(),
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

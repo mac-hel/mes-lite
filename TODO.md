@@ -102,3 +102,12 @@ input:
     - code
     - devops and tooling
 4. developer's guide: whole path/route from README.md -> docs (about GO, about Project) -> proj arch/struct + packages relations -> code
+
+
+
+I have few questions regarding this lesson's implementation:
+1. Should `func (c Correction) Validate() error` be not a method but stand-alone function, that can be used without `Correction` instance?
+2. Shouldn't `SaveCorrection/ListCorrections` methods be placed in own interface, not in Store?
+3. Similar question related to `Registrar interface` - shouldn't `CorrectEntry/ListCorrections` methods be placed in own interface, not in Registrar?
+4. `ListProductionEntriesResponse` contains `[]Entry` field which is domain entity. Is this acceptable that response is coupled to domain this way?
+5. Shouldn't `POST /production-entries/{id}/corrections` be renamed? It is bit misleading now. But - is there other REST-like name for this route? E.g. `POST /production-entries/{id}/correct`.

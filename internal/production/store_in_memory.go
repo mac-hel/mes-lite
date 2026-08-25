@@ -9,12 +9,16 @@ import (
 
 // NewInMemoryStore creates a map-based in-memory [InMemoryStore].
 func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{entries: make(map[string]Entry)}
+	return &InMemoryStore{
+		entries:     make(map[string]Entry),
+		corrections: make(map[string]Correction),
+	}
 }
 
 // InMemoryStore is a map-based in-memory implementation of [Store].
 type InMemoryStore struct {
-	entries map[string]Entry
+	entries     map[string]Entry
+	corrections map[string]Correction
 }
 
 // Save stores a production entry keyed by ID.
@@ -98,4 +102,39 @@ func (s *InMemoryStore) List(_ context.Context, opts ListOptions) ([]Entry, erro
 	}
 
 	return entries[opts.Offset:end], nil
+}
+
+// SaveCorrection stores an append-only correction keyed by correction ID.
+func (s *InMemoryStore) SaveCorrection(_ context.Context, correction Correction) error {
+	if err := correction.Validate(); err != nil {
+		return err
+	}
+	if _, ok := s.entries[correction.EntryID]; !ok {
+		return fmt.Errorf("production entry %q: %w", correction.EntryID, ErrNotFound)
+	}
+	if _, ok := s.corrections[correction.ID]; ok {
+		return fmt.Errorf("production correction %q: %w", correction.ID, ErrAlreadyExists)
+	}
+	s.corrections[correction.ID] = correction
+	return nil
+}
+
+// ListCorrections returns correction history for one production entry, newest first.
+func (s *InMemoryStore) ListCorrections(_ context.Context, entryID string) ([]Correction, error) {
+	if _, ok := s.entries[entryID]; !ok {
+		return nil, fmt.Errorf("production entry %q: %w", entryID, ErrNotFound)
+	}
+	corrections := make([]Correction, 0)
+	for _, correction := range s.corrections {
+		if correction.EntryID == entryID {
+			corrections = append(corrections, correction)
+		}
+	}
+	sort.Slice(corrections, func(i, j int) bool {
+		if corrections[i].CreatedAt.Equal(corrections[j].CreatedAt) {
+			return corrections[i].ID > corrections[j].ID
+		}
+		return corrections[i].CreatedAt.After(corrections[j].CreatedAt)
+	})
+	return corrections, nil
 }

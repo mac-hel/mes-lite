@@ -59,7 +59,13 @@ func testPostgresStore(t *testing.T) *PostgresStore {
 	}
 	t.Cleanup(pool.Close)
 
+	if _, err := pool.Exec(ctx, "DELETE FROM production_entry_corrections"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, "DELETE FROM production_entries"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "DELETE FROM auth_users"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, "DELETE FROM employees"); err != nil {
@@ -77,6 +83,12 @@ func testPostgresStore(t *testing.T) *PostgresStore {
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO products (sku, name, category, unit, is_active, version)
 		VALUES ('sku-1', 'Ventilation Unit', 0, 'piece', true, 1)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO auth_users (id, email, password_hash, role, is_active)
+		VALUES ('manager-1', 'manager@example.com', '\x01', 'manager', true)
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -237,5 +249,76 @@ func TestPostgresStore_ListFiltersAndPaginates(t *testing.T) {
 	}
 	if got[0].ID != entries[1].ID {
 		t.Fatalf("expected newest matching entry %q, got %q", entries[1].ID, got[0].ID)
+	}
+}
+
+func TestPostgresStore_SaveCorrectionAndListCorrections(t *testing.T) {
+	store := testPostgresStore(t)
+	entry := mustProductionEntry(t, "00000000-0000-4000-8000-000000000031", "emp-1", "sku-1", 12, "ws-1", "2026-08-08T10:30:00Z")
+	if err := store.Save(t.Context(), entry); err != nil {
+		t.Fatal(err)
+	}
+	correction, err := NewCorrection(
+		"00000000-0000-4000-8000-000000000032",
+		entry.ID,
+		"manager-1",
+		"quantity typo",
+		"emp-1",
+		"sku-1",
+		13,
+		"ws-2",
+		entry.Timestamp.Add(time.Hour),
+		"corrected",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	correction.CreatedAt = time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+
+	if err := store.SaveCorrection(t.Context(), correction); err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := store.FindByID(t.Context(), entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored != entry {
+		t.Fatalf("expected original entry unchanged %#v, got %#v", entry, stored)
+	}
+	corrections, err := store.ListCorrections(t.Context(), entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(corrections) != 1 {
+		t.Fatalf("expected one correction, got %d", len(corrections))
+	}
+	if corrections[0] != correction {
+		t.Fatalf("expected correction %#v, got %#v", correction, corrections[0])
+	}
+}
+
+func TestPostgresStore_SaveCorrectionMissingEntry(t *testing.T) {
+	store := testPostgresStore(t)
+	correction, err := NewCorrection(
+		"00000000-0000-4000-8000-000000000041",
+		"00000000-0000-4000-8000-000000000042",
+		"manager-1",
+		"quantity typo",
+		"emp-1",
+		"sku-1",
+		13,
+		"ws-2",
+		time.Now(),
+		"",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	correction.CreatedAt = time.Now().UTC()
+
+	err = store.SaveCorrection(t.Context(), correction)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

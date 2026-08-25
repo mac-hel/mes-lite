@@ -32,3 +32,26 @@ WHERE (@employee_id::text = '' OR employee_id = @employee_id::text)
   AND (NOT @to_time::boolean OR occurred_at < @to_value)
 ORDER BY occurred_at DESC, created_at DESC, id DESC
 LIMIT @limit_value OFFSET @offset_value;
+
+-- name: CreateCorrection :one
+INSERT INTO production_entry_corrections (
+    id,
+    entry_id,
+    actor_user_id,
+    reason,
+    employee_id,
+    product_sku,
+    quantity,
+    workstation,
+    occurred_at,
+    comment,
+    created_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, entry_id, actor_user_id, reason, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at;
+
+-- name: ListCorrections :many
+SELECT id, entry_id, actor_user_id, reason, employee_id, product_sku, quantity, workstation, occurred_at, comment, created_at
+FROM production_entry_corrections
+WHERE entry_id = $1
+ORDER BY created_at DESC, id DESC;

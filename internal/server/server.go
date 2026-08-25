@@ -73,6 +73,8 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 
 	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
 	fuego.Get(s, "/production-entries", productionHandler.List, reviewProduction)
+	fuego.Post(s, "/production-entries/{id}/corrections", productionHandler.Correct, reviewProduction)
+	fuego.Get(s, "/production-entries/{id}/corrections", productionHandler.ListCorrections, reviewProduction)
 
 	fuego.Post(s, "/production-orders", ordersHandler.Create, manageOrders)
 	fuego.Get(s, "/production-orders/{id}", ordersHandler.Get, readMasterData)
