@@ -27,8 +27,9 @@ func TestHandler_Create(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var p Product
-	if err := json.NewDecoder(w.Body).Decode(&p); err != nil {
+	responseBody := w.Body.Bytes()
+	var p ProductResponse
+	if err := json.Unmarshal(responseBody, &p); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,6 +47,17 @@ func TestHandler_Create(t *testing.T) {
 	}
 	if !p.IsActive {
 		t.Error("expected IsActive true")
+	}
+
+	var fields map[string]any
+	if err := json.Unmarshal(responseBody, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["sku"]; !ok {
+		t.Fatal("expected lowercase sku field")
+	}
+	if _, ok := fields["SKU"]; ok {
+		t.Fatal("did not expect capitalized SKU field")
 	}
 }
 
@@ -205,7 +217,7 @@ func TestHandler_Update(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var p Product
+	var p ProductResponse
 	if err := json.NewDecoder(w.Body).Decode(&p); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +344,7 @@ func TestHandler_Deactivate(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var p Product
+	var p ProductResponse
 	if err := json.NewDecoder(w.Body).Decode(&p); err != nil {
 		t.Fatal(err)
 	}

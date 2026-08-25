@@ -28,37 +28,47 @@ type CreateEmployeeRequest struct {
 }
 
 // Create handles POST /employees and stores a new employee.
-func (h *Handler) Create(c fuego.ContextWithBody[CreateEmployeeRequest]) (Employee, error) {
+func (h *Handler) Create(c fuego.ContextWithBody[CreateEmployeeRequest]) (EmployeeResponse, error) {
 	body, err := c.Body()
 	if err != nil {
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
 	emp, err := NewEmployee(body.ID, body.FirstName, body.LastName, body.Email)
 	if err != nil {
-		return Employee{}, invalidEmployeeError(err)
+		return EmployeeResponse{}, invalidEmployeeError(err)
 	}
 
 	if err := h.store.Save(c.Context(), emp); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
-			return Employee{}, fuego.ConflictError{
+			return EmployeeResponse{}, fuego.ConflictError{
 				Err:    err,
 				Detail: fmt.Sprintf("employee %q already exists", emp.ID),
 			}
 		}
 		if errors.Is(err, ErrInvalidEmployee) {
-			return Employee{}, invalidEmployeeError(err)
+			return EmployeeResponse{}, invalidEmployeeError(err)
 		}
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
-	return emp, nil
+	return employeeResponse(emp), nil
+}
+
+// EmployeeResponse is the HTTP representation of an employee.
+type EmployeeResponse struct {
+	ID        string `json:"id"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Email     string `json:"email"`
+	IsActive  bool   `json:"isActive"`
+	Version   int    `json:"version"`
 }
 
 // ListEmployeesResponse wraps a slice of employees for JSON serialization.
 type ListEmployeesResponse struct {
-	Employees  []Employee `json:"employees"`
-	Pagination Page       `json:"pagination"`
+	Employees  []EmployeeResponse `json:"employees"`
+	Pagination Page               `json:"pagination"`
 }
 
 // List handles GET /employees and returns all employees.
@@ -81,7 +91,7 @@ func (h *Handler) List(c fuego.ContextNoBody) (ListEmployeesResponse, error) {
 	}
 
 	return ListEmployeesResponse{
-		Employees: emps,
+		Employees: employeeResponses(emps),
 		Pagination: Page{
 			Limit:  opts.Limit,
 			Offset: opts.Offset,
@@ -152,42 +162,42 @@ type UpdateEmployeeRequest struct {
 }
 
 // Update handles PUT /employees/{id} and replaces the employee's mutable fields.
-func (h *Handler) Update(c fuego.ContextWithBody[UpdateEmployeeRequest]) (Employee, error) {
+func (h *Handler) Update(c fuego.ContextWithBody[UpdateEmployeeRequest]) (EmployeeResponse, error) {
 	id := c.PathParam("id")
 
 	emp, err := h.store.FindByID(c.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Employee{}, fuego.NotFoundError{
+			return EmployeeResponse{}, fuego.NotFoundError{
 				Err:    err,
 				Detail: fmt.Sprintf("employee %q not found", id),
 			}
 		}
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
 	body, err := c.Body()
 	if err != nil {
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
 	if err := emp.UpdateDetails(body.FirstName, body.LastName, body.Email); err != nil {
-		return Employee{}, invalidEmployeeError(err)
+		return EmployeeResponse{}, invalidEmployeeError(err)
 	}
 	emp.Version = body.Version
 
 	updated, err := h.store.Update(c.Context(), emp)
 	if err != nil {
 		if errors.Is(err, ErrInvalidEmployee) {
-			return Employee{}, invalidEmployeeError(err)
+			return EmployeeResponse{}, invalidEmployeeError(err)
 		}
 		if errors.Is(err, ErrVersionConflict) {
-			return Employee{}, versionConflictError(err)
+			return EmployeeResponse{}, versionConflictError(err)
 		}
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
-	return updated, nil
+	return employeeResponse(updated), nil
 }
 
 func invalidEmployeeError(err error) fuego.BadRequestError {
@@ -205,18 +215,18 @@ func versionConflictError(err error) fuego.ConflictError {
 }
 
 // Deactivate handles PUT /employees/{id}/deactivate and sets IsActive to false.
-func (h *Handler) Deactivate(c fuego.ContextNoBody) (Employee, error) {
+func (h *Handler) Deactivate(c fuego.ContextNoBody) (EmployeeResponse, error) {
 	id := c.PathParam("id")
 
 	emp, err := h.store.FindByID(c.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Employee{}, fuego.NotFoundError{
+			return EmployeeResponse{}, fuego.NotFoundError{
 				Err:    err,
 				Detail: fmt.Sprintf("employee %q not found", id),
 			}
 		}
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
 	emp.IsActive = false
@@ -224,10 +234,22 @@ func (h *Handler) Deactivate(c fuego.ContextNoBody) (Employee, error) {
 	updated, err := h.store.Update(c.Context(), emp)
 	if err != nil {
 		if errors.Is(err, ErrVersionConflict) {
-			return Employee{}, versionConflictError(err)
+			return EmployeeResponse{}, versionConflictError(err)
 		}
-		return Employee{}, err
+		return EmployeeResponse{}, err
 	}
 
-	return updated, nil
+	return employeeResponse(updated), nil
+}
+
+func employeeResponses(emps []Employee) []EmployeeResponse {
+	responses := make([]EmployeeResponse, 0, len(emps))
+	for _, emp := range emps {
+		responses = append(responses, employeeResponse(emp))
+	}
+	return responses
+}
+
+func employeeResponse(emp Employee) EmployeeResponse {
+	return EmployeeResponse(emp)
 }

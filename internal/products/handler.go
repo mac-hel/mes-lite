@@ -28,37 +28,47 @@ type CreateProductRequest struct {
 }
 
 // Create handles POST /products and stores a new product.
-func (h *Handler) Create(c fuego.ContextWithBody[CreateProductRequest]) (Product, error) {
+func (h *Handler) Create(c fuego.ContextWithBody[CreateProductRequest]) (ProductResponse, error) {
 	body, err := c.Body()
 	if err != nil {
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
 	p, err := NewProduct(body.SKU, body.Name, body.Unit, body.Category)
 	if err != nil {
-		return Product{}, invalidProductError(err)
+		return ProductResponse{}, invalidProductError(err)
 	}
 
 	if err := h.store.Save(c.Context(), p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
-			return Product{}, fuego.ConflictError{
+			return ProductResponse{}, fuego.ConflictError{
 				Err:    err,
 				Detail: fmt.Sprintf("product %q already exists", p.SKU),
 			}
 		}
 		if errors.Is(err, ErrInvalidProduct) {
-			return Product{}, invalidProductError(err)
+			return ProductResponse{}, invalidProductError(err)
 		}
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
-	return p, nil
+	return productResponse(p), nil
+}
+
+// ProductResponse is the HTTP representation of a product.
+type ProductResponse struct {
+	SKU      string          `json:"sku"`
+	Name     string          `json:"name"`
+	Category ProductCategory `json:"category"`
+	Unit     string          `json:"unit"`
+	IsActive bool            `json:"isActive"`
+	Version  int             `json:"version"`
 }
 
 // ListProductsResponse wraps a slice of products for JSON serialization.
 type ListProductsResponse struct {
-	Products   []Product `json:"products"`
-	Pagination Page      `json:"pagination"`
+	Products   []ProductResponse `json:"products"`
+	Pagination Page              `json:"pagination"`
 }
 
 // List handles GET /products and returns all products.
@@ -80,7 +90,7 @@ func (h *Handler) List(c fuego.ContextNoBody) (ListProductsResponse, error) {
 		prods = []Product{}
 	}
 
-	return ListProductsResponse{Products: prods, Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
+	return ListProductsResponse{Products: productResponses(prods), Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
 }
 
 func listOptionsFromQuery(c fuego.ContextNoBody) (ListOptions, error) {
@@ -136,42 +146,42 @@ type UpdateProductRequest struct {
 }
 
 // Update handles PUT /products/{sku} and replaces the product's mutable fields.
-func (h *Handler) Update(c fuego.ContextWithBody[UpdateProductRequest]) (Product, error) {
+func (h *Handler) Update(c fuego.ContextWithBody[UpdateProductRequest]) (ProductResponse, error) {
 	sku := c.PathParam("sku")
 
 	p, err := h.store.FindBySKU(c.Context(), sku)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Product{}, fuego.NotFoundError{
+			return ProductResponse{}, fuego.NotFoundError{
 				Err:    err,
 				Detail: fmt.Sprintf("product %q not found", sku),
 			}
 		}
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
 	body, err := c.Body()
 	if err != nil {
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
 	if err := p.UpdateDetails(body.Name, body.Unit, body.Category); err != nil {
-		return Product{}, invalidProductError(err)
+		return ProductResponse{}, invalidProductError(err)
 	}
 	p.Version = body.Version
 
 	updated, err := h.store.Update(c.Context(), p)
 	if err != nil {
 		if errors.Is(err, ErrInvalidProduct) {
-			return Product{}, invalidProductError(err)
+			return ProductResponse{}, invalidProductError(err)
 		}
 		if errors.Is(err, ErrVersionConflict) {
-			return Product{}, versionConflictError(err)
+			return ProductResponse{}, versionConflictError(err)
 		}
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
-	return updated, nil
+	return productResponse(updated), nil
 }
 
 func invalidProductError(err error) fuego.BadRequestError {
@@ -186,18 +196,18 @@ func versionConflictError(err error) fuego.ConflictError {
 }
 
 // Deactivate handles PUT /products/{sku}/deactivate and sets IsActive to false.
-func (h *Handler) Deactivate(c fuego.ContextNoBody) (Product, error) {
+func (h *Handler) Deactivate(c fuego.ContextNoBody) (ProductResponse, error) {
 	sku := c.PathParam("sku")
 
 	p, err := h.store.FindBySKU(c.Context(), sku)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Product{}, fuego.NotFoundError{
+			return ProductResponse{}, fuego.NotFoundError{
 				Err:    err,
 				Detail: fmt.Sprintf("product %q not found", sku),
 			}
 		}
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
 	p.IsActive = false
@@ -205,12 +215,12 @@ func (h *Handler) Deactivate(c fuego.ContextNoBody) (Product, error) {
 	updated, err := h.store.Update(c.Context(), p)
 	if err != nil {
 		if errors.Is(err, ErrVersionConflict) {
-			return Product{}, versionConflictError(err)
+			return ProductResponse{}, versionConflictError(err)
 		}
-		return Product{}, err
+		return ProductResponse{}, err
 	}
 
-	return updated, nil
+	return productResponse(updated), nil
 }
 
 // Search handles GET /products/search?q=... and filters products by name or category.
@@ -232,5 +242,17 @@ func (h *Handler) Search(c fuego.ContextNoBody) (ListProductsResponse, error) {
 		prods = []Product{}
 	}
 
-	return ListProductsResponse{Products: prods, Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
+	return ListProductsResponse{Products: productResponses(prods), Pagination: Page{Limit: opts.Limit, Offset: opts.Offset, Count: len(prods)}}, nil
+}
+
+func productResponses(prods []Product) []ProductResponse {
+	responses := make([]ProductResponse, 0, len(prods))
+	for _, p := range prods {
+		responses = append(responses, productResponse(p))
+	}
+	return responses
+}
+
+func productResponse(p Product) ProductResponse {
+	return ProductResponse(p)
 }

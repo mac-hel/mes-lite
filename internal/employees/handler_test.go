@@ -27,8 +27,9 @@ func TestHandler_Create(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var emp Employee
-	if err := json.NewDecoder(w.Body).Decode(&emp); err != nil {
+	responseBody := w.Body.Bytes()
+	var emp EmployeeResponse
+	if err := json.Unmarshal(responseBody, &emp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -40,6 +41,17 @@ func TestHandler_Create(t *testing.T) {
 	}
 	if emp.IsActive != true {
 		t.Errorf("expected IsActive true, got %v", emp.IsActive)
+	}
+
+	var fields map[string]any
+	if err := json.Unmarshal(responseBody, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["firstName"]; !ok {
+		t.Fatal("expected lower-camel firstName field")
+	}
+	if _, ok := fields["FirstName"]; ok {
+		t.Fatal("did not expect capitalized FirstName field")
 	}
 }
 
@@ -265,7 +277,7 @@ func TestHandler_Update(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var emp Employee
+	var emp EmployeeResponse
 	if err := json.NewDecoder(w.Body).Decode(&emp); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +366,7 @@ func TestHandler_Deactivate(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var emp Employee
+	var emp EmployeeResponse
 	if err := json.NewDecoder(w.Body).Decode(&emp); err != nil {
 		t.Fatal(err)
 	}
