@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.33
+**Version:** 2.37
 **Status:** IN PROGRESS
-**Current milestone:** 10 - MVP API Completion
-**Current lesson:** L10.4 - MVP API Review
+**Current milestone:** 11 - Background Jobs & Concurrency
+**Current lesson:** L11.1 - Background Job Model & In-Memory Queue
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -38,11 +38,12 @@ This section must always reflect the current progress.
 - Milestone 7
 - Milestone 8
 - Milestone 9
-**Next milestone:** 11 - Background Jobs & Concurrency
+- Milestone 10
+**Next milestone:** 12 - Machine Integration & Synchronization
 **Current branch:** main
-**Architecture maturity:** 8.2 / 10
-**Go knowledge progress:** 68%
-**Interview readiness:** 63%
+**Architecture maturity:** 8.4 / 10
+**Go knowledge progress:** 70%
+**Interview readiness:** 66%
 **Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it.
 
 The AI must update this section at the end of every lesson and milestone.
@@ -5345,7 +5346,7 @@ If significant gaps are found, they should be addressed before moving to post-MV
 
 Status
 
-🔄 In Progress
+✅ Completed
 
 ### Goal
 
@@ -5361,6 +5362,7 @@ Managers and leaders can review entered production records, correct mistakes wit
 - **L10.2** — Production Registration Idempotency
 - **L10.3** — Production Entry Corrections & Audit Trail
 - **L10.4** — MVP API Review
+- **L10.5** — Employee/Product Response DTO Cleanup
 
 ### Lesson 10.1 Scope
 
@@ -5665,6 +5667,253 @@ An experienced Go engineer would approve the append-only direction because it pr
 - Lesson 10.3 completed.
 - Current lesson moved to Lesson 10.4.
 
+### Lesson 10.4 Scope
+
+Review the MVP API for correctness, package boundaries, API contract quality and readiness before moving into post-MVP concurrency lessons.
+
+#### Business Context
+
+Milestone 10 closes the remaining backend API gaps required for the Excel/paper-replacement MVP. Before adding background jobs and concurrency, the API should be coherent, reviewable and safe enough for the current business scope.
+
+#### Problem
+
+The production API had completed review, idempotent registration and correction workflows, but one API-design issue remained from review: production HTTP responses returned domain types directly.
+
+#### Design Discussion
+
+L10.4 keeps behavior unchanged and refactors the production HTTP boundary to use explicit response DTOs. This makes the JSON contract intentional instead of depending on domain struct shape.
+
+The milestone review accepts separate correction-history endpoints for now. An effective/current production-entry read model may be useful later, but the MVP already exposes the original entry and append-only corrections needed for auditability.
+
+#### Go Concepts
+
+- DTO mapping functions
+- preserving API behavior during refactoring
+- small interface review
+- milestone-level code review discipline
+
+#### Architecture Concepts
+
+- HTTP contract separated from domain structs
+- MVP scope closure before adding post-MVP concurrency
+- correction history as explicit read data instead of silent mutation
+- review-driven refactoring
+
+### Lesson 10.4 Completion Notes
+
+#### Business Context
+
+The MVP API now covers production-entry review, retry-safe registration and audit-safe correction workflows.
+
+#### Problem
+
+Production response types were coupled to domain structs. If domain fields changed later, the HTTP API could change accidentally.
+
+#### Design Discussion
+
+Added explicit production response DTOs while keeping request DTOs, routes and JSON field names stable. This resolves the response-coupling issue identified during the L10.3 review.
+
+No broad DTO refactor was applied to all older slices. L10.4 focused on the production MVP API because that is the current milestone boundary.
+
+#### Implementation
+
+- Added `EntryResponse`.
+- Added `CorrectionResponse`.
+- Changed production registration and correction handlers to return response DTOs.
+- Changed production-entry and correction list responses to contain DTO slices.
+- Added mapping helpers from `Entry` and `Correction` to response DTOs.
+- Preserved existing route names and JSON fields.
+
+#### Tests
+
+- Existing production handler tests pass against the stable JSON response contract.
+- Existing server route tests pass for registration, review, idempotency and corrections.
+- Verified with `go test ./internal/production ./internal/server -count=1`.
+
+#### Refactoring
+
+The production HTTP boundary no longer exposes `Entry` or `Correction` directly in handler return types. This keeps future domain changes from accidentally becoming API changes.
+
+#### Code Review
+
+An experienced Go engineer would approve the MVP API shape for the current scope. The API remains small, protected by RBAC, backed by PostgreSQL constraints and tested through handler, service and repository tests.
+
+The main caveat remains OpenAPI metadata quality for query parameters. Endpoints are generated, but explicit query-parameter documentation should still be reviewed later.
+
+#### Exercises
+
+- Add a contract test that asserts production-entry response JSON field names.
+- Design an effective production-entry read model that combines original entry plus latest correction.
+- Compare response DTOs in production with older employee/product handlers and decide whether a broad API DTO refactor is worth the churn.
+
+#### Interview Questions
+
+- Why should HTTP response DTOs be separate from domain structs?
+- How do you decide whether a review finding needs immediate refactoring?
+- Why close MVP scope before introducing background jobs?
+- What risks remain when OpenAPI query parameters are not explicitly documented?
+
+#### Roadmap Update
+
+- Lesson 10.4 completed.
+- Follow-up Lesson 10.5 added for employee/product response DTO cleanup before Milestone 10 closes.
+- Current lesson moved to Lesson 10.5.
+
+### Lesson 10.5 Scope
+
+Refactor employee and product HTTP responses to explicit DTOs without changing route behavior or JSON field names.
+
+#### Business Context
+
+Employees and products are part of the MVP API contract. Their response shapes should be stable for future clients before the project moves into post-MVP concurrency work.
+
+#### Problem
+
+The production, orders, reporting, auth and CSV import slices now use explicit response DTOs where appropriate. Employee and product handlers still return domain structs directly, so future domain changes could accidentally change the public API.
+
+#### Design Discussion
+
+This is a cleanup lesson, not a feature lesson. It should preserve existing behavior, authorization, persistence and JSON field names while making the HTTP boundary explicit.
+
+The lesson should avoid broad domain encapsulation refactors. It should only introduce response DTOs and mapping helpers for employee/product handlers.
+
+#### Go Concepts
+
+- DTO mapping functions
+- preserving API compatibility during refactoring
+- avoiding package-name stutter in exported response types
+- small focused cleanup commits
+
+#### Architecture Concepts
+
+- HTTP contracts separated from domain structs
+- API boundary consistency across vertical slices
+- milestone cleanup before post-MVP concurrency work
+
+#### Implementation Plan
+
+- Add employee response DTOs.
+- Add product response DTOs.
+- Update employee/product create, list, update and deactivate handlers to return DTOs.
+- Keep request DTOs unchanged.
+- Preserve JSON field names.
+- Update handler/server tests only where they decode concrete response types.
+
+#### Tests
+
+- Existing employee/product handler tests should pass.
+- Existing server route tests should pass.
+- Add or update contract assertions only where useful.
+
+#### Exercises
+
+- Compare employee/product response DTOs with production `EntryResponse`.
+- Explain why response DTOs are useful even when they initially match domain fields exactly.
+- Decide whether future employee/product domain fields should be hidden from API responses by default.
+
+#### Interview Questions
+
+- Why should API contracts not depend directly on domain struct fields?
+- When is a DTO refactor worth the churn?
+- How do you preserve compatibility while changing handler return types?
+- Why avoid refactoring domain encapsulation at the same time?
+
+### Lesson 10.5 Completion Notes
+
+#### Business Context
+
+Employee and product API responses now have explicit HTTP contracts before the project moves into post-MVP concurrency work.
+
+#### Problem
+
+Employee and product handlers returned domain structs directly. That made the public API depend on domain field shape.
+
+#### Design Discussion
+
+Added response DTOs while preserving route behavior. Because the API is not used by external clients yet, employee and product response field names were normalized to lower camel case instead of preserving the old capitalized names that came from domain struct encoding.
+
+#### Implementation
+
+- Added `employees.EmployeeResponse`.
+- Added `products.ProductResponse`.
+- Updated employee create, list, update and deactivate handlers to return DTOs.
+- Updated product create, list, update, deactivate and search handlers to return DTOs.
+- Added mapping helpers for employee and product responses.
+- Preserved request DTOs.
+- Normalized employee/product response JSON field names to lower camel case.
+
+#### Tests
+
+- Updated employee handler tests to decode `EmployeeResponse`.
+- Updated product handler tests to decode `ProductResponse`.
+- Added response field-name assertions for employee and product create responses.
+- Verified focused employee/product/server tests.
+
+#### Refactoring
+
+The cleanup did not change domain encapsulation or persistence. It only separated HTTP response contracts from domain structs.
+
+#### Code Review
+
+An experienced Go engineer would approve this as a focused boundary cleanup. Since no external client depends on the API yet, changing employee/product responses to lower camel case is acceptable and makes the API more consistent with existing request DTOs and production responses.
+
+#### Exercises
+
+- Add JSON contract tests for employee and product response field names.
+- Compare preserving capitalized JSON fields with migrating to lower camel case.
+- Identify which older slices still expose domain types and whether changing them is worth the churn.
+
+#### Interview Questions
+
+- Why can a cleanup preserve an imperfect API contract instead of improving field names?
+- Why are DTOs useful even when they are structurally identical to domain structs?
+- How do you avoid mixing API cleanup with domain-model refactoring?
+- What makes an API response change breaking?
+
+#### Roadmap Update
+
+- Lesson 10.5 completed.
+- Milestone 10 completed.
+- Current milestone moved to Milestone 11.
+- Current lesson moved to Lesson 11.1.
+
+### Milestone 10 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve Milestone 10 as an MVP closure milestone. Production-entry registration is retry-safe, review endpoints are protected and filterable, and correction workflows preserve history through append-only records.
+
+The architecture remains vertical-slice oriented. Production owns entry registration, review and correction behavior. Auth owns identity and principal propagation. PostgreSQL owns uniqueness and reference-integrity guardrails.
+
+#### Code Review
+
+The production slice now has clearer boundaries after review. Entry and correction persistence interfaces are split. Handler-facing entry and correction registrar interfaces are split. Production, employee and product HTTP responses now use DTOs instead of exposing domain structs directly.
+
+The code avoids a generic audit framework, generic transaction manager or formal workstation model because none are required by MVP business workflows.
+
+#### Refactoring
+
+L10.4 refactored production HTTP responses to explicit DTOs. L10.5 extended the same response-boundary cleanup to employee and product handlers. Earlier L10.3 review split correction behavior out of entry-oriented interfaces.
+
+#### Interview Review
+
+You should now be able to discuss idempotent write endpoints, partial unique indexes, append-only audit records, actor tracking through request context, REST route naming for subresources and why API DTOs protect contracts from domain-model churn.
+
+#### Completion Criteria
+
+- Managers and leaders can list/review production entries.
+- Review filters cover employee, product, workstation and time range.
+- Production registration requires and enforces `requestId` idempotency.
+- Retry with identical request data returns the original entry.
+- Reusing a request ID for different data returns `409 Conflict`.
+- Corrections are append-only and preserve original production-entry rows.
+- Corrections record reason and authenticated actor user ID.
+- Workers cannot review or correct historical production entries.
+- Workstation remains a text field for MVP.
+- Production HTTP responses use explicit DTOs.
+- Employee and product HTTP responses use explicit DTOs.
+- Tests, build, lint and sqlc generation pass.
+
 ### Features
 
 - list/review production entries for managers and leaders
@@ -5720,7 +5969,15 @@ An experienced Go engineer would approve the append-only direction because it pr
 
 Status
 
-⬜ Not Started
+🔄 In Progress
+
+### Lessons
+
+- **L11.1** — Background Job Model & In-Memory Queue
+- **L11.2** — Worker Pool & Job Execution
+- **L11.3** — Job Progress, Cancellation & Status API
+- **L11.4** — Async CSV Import Job
+- **L11.5** — Race Detection, Shutdown & Concurrency Review
 
 ### Goal
 

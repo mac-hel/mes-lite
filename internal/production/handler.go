@@ -37,8 +37,20 @@ func NewHandler(entries EntryRegistrar, corrections CorrectionRegistrar) *Handle
 
 // ListProductionEntriesResponse wraps production entries for review responses.
 type ListProductionEntriesResponse struct {
-	Entries    []Entry `json:"entries"`
-	Pagination Page    `json:"pagination"`
+	Entries    []EntryResponse `json:"entries"`
+	Pagination Page            `json:"pagination"`
+}
+
+// EntryResponse is the HTTP representation of a production entry.
+type EntryResponse struct {
+	ID          string    `json:"id"`
+	RequestID   string    `json:"requestId"`
+	EmployeeID  string    `json:"employeeId"`
+	ProductSKU  string    `json:"productSku"`
+	Quantity    int       `json:"quantity"`
+	Workstation string    `json:"workstation"`
+	Timestamp   time.Time `json:"timestamp"`
+	Comment     string    `json:"comment"`
 }
 
 // List handles GET /production-entries for production-entry review.
@@ -60,7 +72,7 @@ func (h *Handler) List(c fuego.ContextNoBody) (ListProductionEntriesResponse, er
 	}
 
 	return ListProductionEntriesResponse{
-		Entries: entries,
+		Entries: productionEntryResponses(entries),
 		Pagination: Page{
 			Limit:  opts.Limit,
 			Offset: opts.Offset,
@@ -151,60 +163,75 @@ type CorrectProductionEntryRequest struct {
 
 // ListCorrectionsResponse wraps correction history for JSON serialization.
 type ListCorrectionsResponse struct {
-	Corrections []Correction `json:"corrections"`
+	Corrections []CorrectionResponse `json:"corrections"`
+}
+
+// CorrectionResponse is the HTTP representation of a production-entry correction.
+type CorrectionResponse struct {
+	ID          string    `json:"id"`
+	EntryID     string    `json:"entryId"`
+	ActorUserID string    `json:"actorUserId"`
+	Reason      string    `json:"reason"`
+	EmployeeID  string    `json:"employeeId"`
+	ProductSKU  string    `json:"productSku"`
+	Quantity    int       `json:"quantity"`
+	Workstation string    `json:"workstation"`
+	Timestamp   time.Time `json:"timestamp"`
+	Comment     string    `json:"comment"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // Register handles POST /production-entries and stores a completed production entry.
-func (h *Handler) Register(c fuego.ContextWithBody[RegisterProductionRequest]) (Entry, error) {
+func (h *Handler) Register(c fuego.ContextWithBody[RegisterProductionRequest]) (EntryResponse, error) {
 	body, err := c.Body()
 	if err != nil {
-		return Entry{}, err
+		return EntryResponse{}, err
 	}
 
 	entry, err := h.entries.Register(c.Context(), RegisterCommand(body))
 	if err != nil {
 		if errors.Is(err, ErrRequestConflict) {
-			return Entry{}, fuego.ConflictError{
+			return EntryResponse{}, fuego.ConflictError{
 				Err:    err,
 				Detail: err.Error(),
 			}
 		}
 		if errors.Is(err, ErrAlreadyExists) {
-			return Entry{}, fuego.ConflictError{
+			return EntryResponse{}, fuego.ConflictError{
 				Err:    err,
 				Detail: "production entry already exists",
 			}
 		}
 		if errors.Is(err, ErrInvalidEntry) {
-			return Entry{}, invalidEntryError(err)
+			return EntryResponse{}, invalidEntryError(err)
 		}
 		if errors.Is(err, ErrEmployeeNotFound) || errors.Is(err, ErrProductNotFound) {
-			return Entry{}, fuego.NotFoundError{
+			return EntryResponse{}, fuego.NotFoundError{
 				Err:    err,
 				Detail: err.Error(),
 			}
 		}
 		if errors.Is(err, ErrEmployeeInactive) || errors.Is(err, ErrProductInactive) {
-			return Entry{}, fuego.BadRequestError{
+			return EntryResponse{}, fuego.BadRequestError{
 				Err:    err,
 				Detail: err.Error(),
 			}
 		}
-		return Entry{}, err
+		return EntryResponse{}, err
 	}
 
-	return entry, nil
+	return productionEntryResponse(entry), nil
 }
 
 // Correct appends an audit correction for a production entry without changing the original row.
-func (h *Handler) Correct(c fuego.ContextWithBody[CorrectProductionEntryRequest]) (Correction, error) {
+func (h *Handler) Correct(c fuego.ContextWithBody[CorrectProductionEntryRequest]) (CorrectionResponse, error) {
 	principal, ok := auth.PrincipalFromContext(c.Context())
 	if !ok {
-		return Correction{}, fuego.UnauthorizedError{Detail: "missing authenticated principal"}
+		return CorrectionResponse{}, fuego.UnauthorizedError{Detail: "missing authenticated principal"}
 	}
 	body, err := c.Body()
 	if err != nil {
-		return Correction{}, err
+		return CorrectionResponse{}, err
 	}
 
 	correction, err := h.corrections.CorrectEntry(c.Context(), CorrectEntryCommand{
@@ -219,10 +246,10 @@ func (h *Handler) Correct(c fuego.ContextWithBody[CorrectProductionEntryRequest]
 		Comment:     body.Comment,
 	})
 	if err != nil {
-		return Correction{}, correctionError(c.PathParam("id"), err)
+		return CorrectionResponse{}, correctionError(c.PathParam("id"), err)
 	}
 
-	return correction, nil
+	return correctionResponse(correction), nil
 }
 
 // ListCorrections returns the append-only correction history for one production entry.
@@ -235,7 +262,31 @@ func (h *Handler) ListCorrections(c fuego.ContextNoBody) (ListCorrectionsRespons
 		corrections = []Correction{}
 	}
 
-	return ListCorrectionsResponse{Corrections: corrections}, nil
+	return ListCorrectionsResponse{Corrections: correctionResponses(corrections)}, nil
+}
+
+func productionEntryResponses(entries []Entry) []EntryResponse {
+	responses := make([]EntryResponse, 0, len(entries))
+	for _, entry := range entries {
+		responses = append(responses, productionEntryResponse(entry))
+	}
+	return responses
+}
+
+func productionEntryResponse(entry Entry) EntryResponse {
+	return EntryResponse(entry)
+}
+
+func correctionResponses(corrections []Correction) []CorrectionResponse {
+	responses := make([]CorrectionResponse, 0, len(corrections))
+	for _, correction := range corrections {
+		responses = append(responses, correctionResponse(correction))
+	}
+	return responses
+}
+
+func correctionResponse(correction Correction) CorrectionResponse {
+	return CorrectionResponse(correction)
 }
 
 func correctionError(entryID string, err error) error {

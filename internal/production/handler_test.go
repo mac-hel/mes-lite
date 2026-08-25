@@ -62,7 +62,7 @@ func TestHandler_Register(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var entry Entry
+	var entry EntryResponse
 	if err := json.NewDecoder(w.Body).Decode(&entry); err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +96,8 @@ func TestHandler_Register(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored != entry {
-		t.Errorf("expected stored entry %#v, got %#v", entry, stored)
+	if productionEntryResponse(stored) != entry {
+		t.Errorf("expected stored entry response %#v, got %#v", entry, stored)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestHandler_Register_IdempotentRetry(t *testing.T) {
 	if firstW.Code != http.StatusOK {
 		t.Fatalf("expected first status 200, got %d: %s", firstW.Code, firstW.Body.String())
 	}
-	var first Entry
+	var first EntryResponse
 	if err := json.NewDecoder(firstW.Body).Decode(&first); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestHandler_Register_IdempotentRetry(t *testing.T) {
 	if secondW.Code != http.StatusOK {
 		t.Fatalf("expected retry status 200, got %d: %s", secondW.Code, secondW.Body.String())
 	}
-	var second Entry
+	var second EntryResponse
 	if err := json.NewDecoder(secondW.Body).Decode(&second); err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestHandler_Correct(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var correction Correction
+	var correction CorrectionResponse
 	if err := json.NewDecoder(w.Body).Decode(&correction); err != nil {
 		t.Fatal(err)
 	}

@@ -729,7 +729,7 @@ func createProductionEntry(t *testing.T, s *Server, tokens *auth.TokenManager) s
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected create status 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var created production.Entry
+	var created production.EntryResponse
 	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
