@@ -42,8 +42,9 @@ ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical id
 Should we introduce sanity tests? Either implement new ones or convert some existing tests.
 
 ## cross-cutting/infra dir?
-Is this good idea to move packages not related to business domain into one or two common directories?
-Cross-cutting or infrastructure related packages that could be moved: auth, config, postgres, server, version.
+Currently `internal/` contains mix of business, infra (postgres, server, auth, version), config and helper packages.
+I am considering to separate business slices by moving non-business packages into separate directory.
+What is your take on this?
 
 ## validation library
 Is there a place for validation library in the project, in any package, in any layer?
@@ -105,9 +106,12 @@ input:
 
 
 
-I have few questions regarding this lesson's implementation:
-1. Should `func (c Correction) Validate() error` be not a method but stand-alone function, that can be used without `Correction` instance?
-2. Shouldn't `SaveCorrection/ListCorrections` methods be placed in own interface, not in Store?
-3. Similar question related to `Registrar interface` - shouldn't `CorrectEntry/ListCorrections` methods be placed in own interface, not in Registrar?
-4. `ListProductionEntriesResponse` contains `[]Entry` field which is domain entity. Is this acceptable that response is coupled to domain this way?
-5. Shouldn't `POST /production-entries/{id}/corrections` be renamed? It is bit misleading now. But - is there other REST-like name for this route? E.g. `POST /production-entries/{id}/correct`.
+
+## System design documents
+I will use AI Agent to develop MESLite project.
+What documents I need to provide sufficient information about this project, for AI to:
+- understand business context
+- understand business requirements
+
+Please create system architecture document (not sure what should be professional name for this kind of document) that will contain above arrangements.
+It should be suitable as part of AI-driven setup documentation. It should provide sufficient information to make AI understand

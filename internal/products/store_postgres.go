@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/mac-hel/mes-lite/internal/postgres"
+	"github.com/mac-hel/mes-lite/internal/platform/postgres"
 	"github.com/mac-hel/mes-lite/internal/products/productsdb"
 )
 

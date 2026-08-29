@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mac-hel/mes-lite/internal/auth/authdb"
-	"github.com/mac-hel/mes-lite/internal/postgres"
+	"github.com/mac-hel/mes-lite/internal/platform/postgres"
 )
 
 // NewPostgresStore creates a PostgreSQL-backed auth user store.

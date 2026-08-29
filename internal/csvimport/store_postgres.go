@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/mac-hel/mes-lite/internal/ids"
-	"github.com/mac-hel/mes-lite/internal/postgres"
+	"github.com/mac-hel/mes-lite/internal/platform/ids"
+	"github.com/mac-hel/mes-lite/internal/platform/postgres"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/production/productiondb"
 )

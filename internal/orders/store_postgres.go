@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mac-hel/mes-lite/internal/orders/ordersdb"
-	"github.com/mac-hel/mes-lite/internal/postgres"
+	"github.com/mac-hel/mes-lite/internal/platform/postgres"
 )
 
 // NewPostgresStore creates a PostgreSQL-backed [Store].

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/employees"
-	"github.com/mac-hel/mes-lite/internal/ids"
+	"github.com/mac-hel/mes-lite/internal/platform/ids"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 

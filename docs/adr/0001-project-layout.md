@@ -1,6 +1,8 @@
 # ADR 0001: Project Layout
 
-**Status:** Accepted
+**Status:** Accepted — extended by ADR 0005, which adds an `internal/platform/`
+tier for technical packages. Business slices still sit directly under
+`internal/` as described below.
 
 **Deciders:** Initial project setup
 

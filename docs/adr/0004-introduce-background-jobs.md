@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted — amended by ADR 0005. The package described below as
+`internal/jobs` now lives at `internal/platform/jobs`, where a depguard rule
+keeps it free of business imports.
 
 ## Context
 
@@ -14,7 +16,7 @@ The queue implementation is the decision with long-term consequences. A durable 
 
 ## Decision
 
-Introduce `internal/jobs` as a vertical slice owning the background job model and an in-memory, channel-backed queue.
+Introduce `internal/jobs` as a package owning the background job model and an in-memory, channel-backed queue. (ADR 0005 later reclassified it as a platform package at `internal/platform/jobs`; it was never a business slice, since it carries opaque payloads and knows nothing about production data.)
 
 `jobs.Queue` keeps two pieces of state:
 

@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mac-hel/mes-lite/internal/auth"
-	"github.com/mac-hel/mes-lite/internal/config"
 	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
+	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"

@@ -13,7 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/mac-hel/mes-lite/internal/ids"
+	"github.com/mac-hel/mes-lite/internal/platform/ids"
 )
 
 func testPostgresStore(t *testing.T) *PostgresStore {

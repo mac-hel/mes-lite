@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/mac-hel/mes-lite/internal/auth"
-	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/platform/config"
 )
 
 func TestSanity_MVPAPIFlow(t *testing.T) {

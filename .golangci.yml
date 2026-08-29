@@ -2,6 +2,7 @@ version: "2"
 
 linters:
   enable:
+    - depguard
     - errcheck
     - govet
     - ineffassign
@@ -16,6 +17,45 @@ linters:
       rules:
         - name: exported
           severity: warning
+
+    # Enforces the dependency direction described in docs/package-layout.md.
+    # The directory split is documentation; these rules are the enforcement.
+    depguard:
+      rules:
+        # internal/platform holds technical packages with no business meaning.
+        # They must stay importable by every slice, which means importing none.
+        platform-stays-business-free:
+          list-mode: lax
+          files:
+            - "**/internal/platform/**"
+          deny:
+            - pkg: github.com/mac-hel/mes-lite/internal/auth
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/csvimport
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/employees
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/orders
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/production
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/products
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/reporting
+              desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/server
+              desc: platform packages must not import the composition root
+
+        # internal/server wires everything together. Nothing may wire back.
+        composition-root-is-not-a-dependency:
+          list-mode: lax
+          files:
+            - "$all"
+            - "!**/internal/server/**"
+            - "!**/cmd/**"
+          deny:
+            - pkg: github.com/mac-hel/mes-lite/internal/server
+              desc: only cmd/ may import the composition root
 
 formatters:
   enable:

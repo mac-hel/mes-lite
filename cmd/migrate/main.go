@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/mac-hel/mes-lite/internal/config"
+	"github.com/mac-hel/mes-lite/internal/platform/config"
 )
 
 func main() {
