@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mac-hel/mes-lite/internal/ids"
 	"github.com/mac-hel/mes-lite/internal/postgres"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/production/productiondb"
@@ -77,13 +78,8 @@ func (s *PostgresStore) SaveBatch(ctx context.Context, records []ProductionEntry
 }
 
 func entryFromRecord(record ProductionEntryRecord) (production.Entry, error) {
-	id, err := production.NewEntryID()
-	if err != nil {
-		return production.Entry{}, err
-	}
-
 	return production.NewEntry(
-		id,
+		ids.New(),
 		record.EmployeeID,
 		record.ProductSKU,
 		record.Quantity,

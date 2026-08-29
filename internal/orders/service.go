@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/ids"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
@@ -79,11 +80,7 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (Order, error) 
 	if err != nil {
 		return Order{}, err
 	}
-	id, err := NewOrderID()
-	if err != nil {
-		return Order{}, err
-	}
-	order, err := NewOrder(id, orderLines, time.Now())
+	order, err := NewOrder(ids.New(), orderLines, time.Now())
 	if err != nil {
 		return Order{}, err
 	}

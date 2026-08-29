@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/ids"
 	"github.com/mac-hel/mes-lite/internal/products"
 )
 
@@ -80,13 +81,8 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (Entry, err
 		return Entry{}, fmt.Errorf("request id is required: %w", ErrInvalidEntry)
 	}
 
-	id, err := NewEntryID()
-	if err != nil {
-		return Entry{}, err
-	}
-
 	entry, err := NewEntryWithRequestID(
-		id,
+		ids.New(),
 		cmd.RequestID,
 		cmd.EmployeeID,
 		cmd.ProductSKU,
@@ -148,11 +144,7 @@ func (s *Service) CorrectEntry(ctx context.Context, cmd CorrectEntryCommand) (Co
 		return Correction{}, err
 	}
 
-	id, err := NewEntryID()
-	if err != nil {
-		return Correction{}, err
-	}
-	correction, err := NewCorrection(id, cmd.EntryID, cmd.ActorUserID, cmd.Reason, cmd.EmployeeID, cmd.ProductSKU, cmd.Quantity, cmd.Workstation, cmd.Timestamp, cmd.Comment)
+	correction, err := NewCorrection(ids.New(), cmd.EntryID, cmd.ActorUserID, cmd.Reason, cmd.EmployeeID, cmd.ProductSKU, cmd.Quantity, cmd.Workstation, cmd.Timestamp, cmd.Comment)
 	if err != nil {
 		return Correction{}, err
 	}

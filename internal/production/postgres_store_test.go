@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+
+	"github.com/mac-hel/mes-lite/internal/ids"
 )
 
 func testPostgresStore(t *testing.T) *PostgresStore {
@@ -98,10 +100,7 @@ func testPostgresStore(t *testing.T) *PostgresStore {
 
 func TestPostgresStore_SaveAndFindByID(t *testing.T) {
 	store := testPostgresStore(t)
-	id, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := ids.New()
 	entry, err := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Date(2026, 8, 8, 10, 30, 0, 0, time.UTC), "batch finished")
 	if err != nil {
 		t.Fatal(err)
@@ -123,10 +122,7 @@ func TestPostgresStore_SaveAndFindByID(t *testing.T) {
 
 func TestPostgresStore_SaveDuplicate(t *testing.T) {
 	store := testPostgresStore(t)
-	id, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := ids.New()
 	entry, err := NewEntry(id, "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
 	if err != nil {
 		t.Fatal(err)
@@ -144,18 +140,12 @@ func TestPostgresStore_SaveDuplicate(t *testing.T) {
 
 func TestPostgresStore_SaveDuplicateRequestID(t *testing.T) {
 	store := testPostgresStore(t)
-	firstID, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	firstID := ids.New()
 	first, err := NewEntryWithRequestID(firstID, "request-1", "emp-1", "sku-1", 12, "ws-1", time.Now(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondID, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	secondID := ids.New()
 	second, err := NewEntryWithRequestID(secondID, "request-1", "emp-1", "sku-1", 12, "ws-1", first.Timestamp, "")
 	if err != nil {
 		t.Fatal(err)
@@ -180,12 +170,9 @@ func TestPostgresStore_SaveDuplicateRequestID(t *testing.T) {
 
 func TestPostgresStore_FindByID_NotFound(t *testing.T) {
 	store := testPostgresStore(t)
-	id, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := ids.New()
 
-	_, err = store.FindByID(t.Context(), id)
+	_, err := store.FindByID(t.Context(), id)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
@@ -202,10 +189,7 @@ func TestPostgresStore_FindByID_InvalidID(t *testing.T) {
 
 func TestPostgresStore_SaveMissingReference(t *testing.T) {
 	store := testPostgresStore(t)
-	id, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := ids.New()
 	entry, err := NewEntry(id, "missing", "sku-1", 12, "ws-1", time.Now(), "")
 	if err != nil {
 		t.Fatal(err)

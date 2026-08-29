@@ -75,17 +75,3 @@ func TestNewEntry_RejectsInvalidState(t *testing.T) {
 		t.Fatalf("expected ErrInvalidEntry, got %v", err)
 	}
 }
-
-func TestNewEntryID(t *testing.T) {
-	id, err := NewEntryID()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(id) != 36 {
-		t.Fatalf("expected UUID-shaped ID length 36, got %d", len(id))
-	}
-	if id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
-		t.Fatalf("expected UUID-shaped ID, got %q", id)
-	}
-}

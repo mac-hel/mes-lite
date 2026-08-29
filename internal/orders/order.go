@@ -1,8 +1,6 @@
 package orders
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -163,30 +161,6 @@ func NewOrder(id string, lines OrderLines, now time.Time) (Order, error) {
 	}
 
 	return order, nil
-}
-
-// NewOrderID creates a UUID-shaped production order identifier using the standard library.
-func NewOrderID() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("generate production order id: %w", err)
-	}
-
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-
-	var dst [36]byte
-	hex.Encode(dst[0:8], b[0:4])
-	dst[8] = '-'
-	hex.Encode(dst[9:13], b[4:6])
-	dst[13] = '-'
-	hex.Encode(dst[14:18], b[6:8])
-	dst[18] = '-'
-	hex.Encode(dst[19:23], b[8:10])
-	dst[23] = '-'
-	hex.Encode(dst[24:36], b[10:16])
-
-	return string(dst[:]), nil
 }
 
 // RestoreOrder rebuilds a persisted order while preserving aggregate validation.

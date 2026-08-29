@@ -108,21 +108,3 @@ func TestStatus_ValidAndTerminal(t *testing.T) {
 		})
 	}
 }
-
-func TestNewJobID_IsUnpredictableAndUUIDShaped(t *testing.T) {
-	first, err := NewJobID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := NewJobID()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if first == second {
-		t.Error("expected unique job IDs")
-	}
-	if len(first) != 36 {
-		t.Errorf("expected a UUID-shaped ID, got %q", first)
-	}
-}
