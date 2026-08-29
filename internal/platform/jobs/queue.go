@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 )
 
 // DefaultQueueCapacity bounds how many jobs can wait for a worker.
@@ -21,6 +23,9 @@ var ErrNotFound = errors.New("background job not found")
 
 // ErrAlreadyExists is returned when a job ID is already tracked by the queue.
 var ErrAlreadyExists = errors.New("background job already exists")
+
+// ErrInvalidStatusTransition is returned when a job cannot move between two lifecycle states.
+var ErrInvalidStatusTransition = errors.New("invalid background job status transition")
 
 // Queue is an in-memory FIFO queue of background jobs.
 //
@@ -146,6 +151,70 @@ func (q *Queue) Find(_ context.Context, id string) (Job, error) {
 	if !ok {
 		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
 	}
+
+	return job.clone(), nil
+}
+
+// MarkRunning moves a queued job to running and records its start time.
+func (q *Queue) MarkRunning(ctx context.Context, id string, startedAt time.Time) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status != StatusQueued {
+		return Job{}, fmt.Errorf("job %q cannot move from %q to %q: %w", id, job.Status, StatusRunning, ErrInvalidStatusTransition)
+	}
+
+	job.Status = StatusRunning
+	job.StartedAt = startedAt.UTC()
+	job.FinishedAt = time.Time{}
+	job.Error = ""
+	q.jobs[id] = job
+
+	return job.clone(), nil
+}
+
+// MarkSucceeded moves a running job to succeeded and records its finish time.
+func (q *Queue) MarkSucceeded(ctx context.Context, id string, finishedAt time.Time) (Job, error) {
+	return q.markFinished(ctx, id, StatusSucceeded, "", finishedAt)
+}
+
+// MarkFailed moves a running job to failed and records the failure message.
+func (q *Queue) MarkFailed(ctx context.Context, id string, message string, finishedAt time.Time) (Job, error) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "job failed"
+	}
+	return q.markFinished(ctx, id, StatusFailed, message, finishedAt)
+}
+
+func (q *Queue) markFinished(ctx context.Context, id string, status Status, message string, finishedAt time.Time) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status != StatusRunning {
+		return Job{}, fmt.Errorf("job %q cannot move from %q to %q: %w", id, job.Status, status, ErrInvalidStatusTransition)
+	}
+
+	job.Status = status
+	job.FinishedAt = finishedAt.UTC()
+	job.Error = message
+	q.jobs[id] = job
 
 	return job.clone(), nil
 }

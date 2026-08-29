@@ -240,6 +240,76 @@ func TestQueue_FindUnknownJob(t *testing.T) {
 	}
 }
 
+func TestQueue_StatusTransitions(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	startedAt := time.Date(2026, 8, 29, 8, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
+	running, err := queue.MarkRunning(ctx, "job-1", startedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if running.Status != StatusRunning {
+		t.Fatalf("expected running status, got %q", running.Status)
+	}
+	if !running.StartedAt.Equal(startedAt.UTC()) {
+		t.Errorf("expected UTC started at %s, got %s", startedAt.UTC(), running.StartedAt)
+	}
+
+	finishedAt := startedAt.Add(time.Minute)
+	succeeded, err := queue.MarkSucceeded(ctx, "job-1", finishedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if succeeded.Status != StatusSucceeded {
+		t.Fatalf("expected succeeded status, got %q", succeeded.Status)
+	}
+	if !succeeded.FinishedAt.Equal(finishedAt.UTC()) {
+		t.Errorf("expected UTC finished at %s, got %s", finishedAt.UTC(), succeeded.FinishedAt)
+	}
+	if succeeded.Error != "" {
+		t.Errorf("expected no error message, got %q", succeeded.Error)
+	}
+}
+
+func TestQueue_StatusTransitionsRejectInvalidMoves(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := queue.MarkSucceeded(ctx, "job-1", time.Now()); !errors.Is(err, ErrInvalidStatusTransition) {
+		t.Fatalf("expected queued to succeeded to be rejected, got %v", err)
+	}
+	if _, err := queue.MarkRunning(ctx, "missing", time.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected missing job to return ErrNotFound, got %v", err)
+	}
+
+	if _, err := queue.MarkRunning(ctx, "job-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := queue.MarkFailed(ctx, "job-1", " boom ", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.Status != StatusFailed {
+		t.Fatalf("expected failed status, got %q", failed.Status)
+	}
+	if failed.Error != "boom" {
+		t.Errorf("expected trimmed error message, got %q", failed.Error)
+	}
+
+	if _, err := queue.MarkRunning(ctx, "job-1", time.Now()); !errors.Is(err, ErrInvalidStatusTransition) {
+		t.Fatalf("expected failed to running to be rejected, got %v", err)
+	}
+}
+
 // TestQueue_ConcurrentProducersAndConsumers is written for `go test -race`:
 // every enqueued job must be handed to exactly one consumer.
 func TestQueue_ConcurrentProducersAndConsumers(t *testing.T) {
