@@ -59,6 +59,10 @@ func (s *Service) importProductionEntries(ctx context.Context, input io.Reader, 
 	batch := make([]ProductionEntryRecord, 0, batchSize)
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return ImportSummary{}, err
+		}
+
 		raw, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {

@@ -95,13 +95,17 @@ func run() int {
 	reportingHandler := reporting.NewHandler(reportingStore)
 
 	csvImportStore := csvimport.NewPostgresStore(db)
-	csvImportHandler := csvimport.NewHandler(csvimport.NewService(csvImportStore))
+	csvImportService := csvimport.NewService(csvImportStore)
 	jobQueue := jobs.NewQueue(jobs.DefaultQueueCapacity)
-	jobWorkers, err := jobs.NewWorkerPool(jobQueue, jobs.DefaultWorkerCount, nil)
+	jobWorkers, err := jobs.NewWorkerPool(jobQueue, jobs.DefaultWorkerCount, map[jobs.Type]jobs.Handler{
+		jobs.TypeProductionEntryImport: csvimport.NewProductionEntriesJobHandler(csvImportService, jobQueue),
+	})
 	if err != nil {
 		slog.Error("create background worker pool", "err", err)
 		return 1
 	}
+	csvImportAsyncService := csvimport.NewAsyncService(jobQueue, "")
+	csvImportHandler := csvimport.NewHandlerWithAsync(csvImportService, csvImportAsyncService)
 	jobWorkers.Start(ctx)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

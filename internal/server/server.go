@@ -93,6 +93,9 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 
 	if len(csvImportHandlers) > 0 && csvImportHandlers[0] != nil {
 		fuego.Post(s, "/imports/production-entries", csvImportHandlers[0].ImportProductionEntries, importProduction)
+		if csvImportHandlers[0].AsyncEnabled() {
+			fuego.Post(s, "/imports/production-entries/jobs", csvImportHandlers[0].ImportProductionEntriesAsync, importProduction)
+		}
 	}
 
 	return &Server{Server: s, cfg: cfg}

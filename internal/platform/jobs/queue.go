@@ -276,6 +276,29 @@ func (q *Queue) ReportProgress(ctx context.Context, id string, progress int) (Jo
 	return job.clone(), nil
 }
 
+// RecordResult stores handler-produced result data for a running job.
+func (q *Queue) RecordResult(ctx context.Context, id string, result []byte) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status != StatusRunning {
+		return Job{}, fmt.Errorf("job %q cannot record result while %q: %w", id, job.Status, ErrInvalidStatusTransition)
+	}
+
+	job.Result = copyPayload(result)
+	q.jobs[id] = job
+
+	return job.clone(), nil
+}
+
 // RequestCancellation records a cancellation request. Queued jobs are cancelled
 // immediately; running jobs must observe their context and stop cooperatively.
 func (q *Queue) RequestCancellation(ctx context.Context, id string, requestedAt time.Time) (Job, error) {

@@ -698,6 +698,51 @@ func TestProductionEntryImportRejectsInvalidCSVHeader(t *testing.T) {
 	}
 }
 
+func TestAsyncProductionEntryImportAllowsManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	jobQueue := jobs.NewQueue(4)
+	csvImportService := csvimport.NewService(csvimport.NewInMemoryStore())
+	csvImportH := csvimport.NewHandlerWithAsync(csvImportService, csvimport.NewAsyncService(jobQueue, t.TempDir()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	body := strings.Join([]string{
+		"employee_id,product_sku,quantity,workstation,timestamp,comment",
+		"emp-1,sku-1,12,ws-1,2026-08-20T10:00:00Z,valid",
+	}, "\n")
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries/jobs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "text/csv")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response jobs.JobResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.ID == "" || response.Type != jobs.TypeProductionEntryImport.String() || response.Status != jobs.StatusQueued.String() {
+		t.Fatalf("unexpected job response: %+v", response)
+	}
+}
+
+func TestAsyncProductionEntryImportRejectsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	jobQueue := jobs.NewQueue(4)
+	csvImportService := csvimport.NewService(csvimport.NewInMemoryStore())
+	csvImportH := csvimport.NewHandlerWithAsync(csvImportService, csvimport.NewAsyncService(jobQueue, t.TempDir()))
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH, csvImportH)
+	req := httptest.NewRequest(http.MethodPost, "/imports/production-entries/jobs", strings.NewReader("employee_id,product_sku,quantity,workstation,timestamp,comment\n"))
+	req.Header.Set("Content-Type", "text/csv")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestJobStatusRouteAllowsManagers(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)

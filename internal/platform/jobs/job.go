@@ -73,6 +73,7 @@ type Job struct {
 	Payload         []byte
 	Progress        int
 	CancelRequested bool
+	Result          []byte
 	EnqueuedAt      time.Time
 	StartedAt       time.Time
 	FinishedAt      time.Time
@@ -123,6 +124,7 @@ func (j Job) Validate() error {
 // clone returns a copy that shares no memory with the receiver.
 func (j Job) clone() Job {
 	j.Payload = copyPayload(j.Payload)
+	j.Result = copyPayload(j.Result)
 	return j
 }
 

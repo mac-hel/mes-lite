@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -36,6 +37,7 @@ type JobResponse struct {
 	StartedAt       time.Time `json:"startedAt,omitempty"`
 	FinishedAt      time.Time `json:"finishedAt,omitempty"`
 	Error           string    `json:"error,omitempty"`
+	Result          any       `json:"result,omitempty"`
 }
 
 // Get returns one background job status snapshot.
@@ -44,7 +46,7 @@ func (h *HTTPHandler) Get(c fuego.ContextNoBody) (JobResponse, error) {
 	if err != nil {
 		return JobResponse{}, jobHTTPError(c.PathParam("id"), err)
 	}
-	return jobResponse(job), nil
+	return NewJobResponse(job), nil
 }
 
 // Cancel requests cancellation for one background job.
@@ -53,11 +55,12 @@ func (h *HTTPHandler) Cancel(c fuego.ContextNoBody) (JobResponse, error) {
 	if err != nil {
 		return JobResponse{}, jobHTTPError(c.PathParam("id"), err)
 	}
-	return jobResponse(job), nil
+	return NewJobResponse(job), nil
 }
 
-func jobResponse(job Job) JobResponse {
-	return JobResponse{
+// NewJobResponse maps a tracked job to its HTTP response shape.
+func NewJobResponse(job Job) JobResponse {
+	response := JobResponse{
 		ID:              job.ID,
 		Type:            job.Type.String(),
 		Status:          job.Status.String(),
@@ -68,6 +71,10 @@ func jobResponse(job Job) JobResponse {
 		FinishedAt:      job.FinishedAt,
 		Error:           job.Error,
 	}
+	if len(job.Result) > 0 {
+		response.Result = json.RawMessage(job.Result)
+	}
+	return response
 }
 
 func jobHTTPError(id string, err error) error {
