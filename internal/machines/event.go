@@ -12,6 +12,15 @@ import (
 // ErrInvalidEvent marks invalid machine event input.
 var ErrInvalidEvent = errors.New("invalid machine event")
 
+// ErrDuplicateEvent means an event with the same machine/external ID already exists.
+var ErrDuplicateEvent = errors.New("duplicate machine event")
+
+// ErrEventConflict means a duplicate machine event key was reused for different data.
+var ErrEventConflict = errors.New("machine event conflict")
+
+// ErrNotFound means the requested machine event does not exist.
+var ErrNotFound = errors.New("machine event not found")
+
 // EventType identifies the kind of signal received from a production machine.
 type EventType string
 
@@ -95,4 +104,15 @@ func (e Event) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (e Event) samePayload(other Event) bool {
+	return e.MachineID == other.MachineID &&
+		e.ExternalEventID == other.ExternalEventID &&
+		e.Type == other.Type &&
+		e.OccurredAt.Equal(other.OccurredAt) &&
+		e.ProductSKU == other.ProductSKU &&
+		e.Quantity == other.Quantity &&
+		e.Workstation == other.Workstation &&
+		e.Message == other.Message
 }

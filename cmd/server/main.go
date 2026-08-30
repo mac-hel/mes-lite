@@ -94,7 +94,8 @@ func run() int {
 
 	reportingStore := reporting.NewPostgresStore(db)
 	reportingHandler := reporting.NewHandler(reportingStore)
-	machineHandler := machines.NewHandler(machines.NewInMemoryStore())
+	machineStore := machines.NewInMemoryStore()
+	machineHandler := machines.NewHandler(machines.NewService(machineStore))
 
 	csvImportStore := csvimport.NewPostgresStore(db)
 	csvImportService := csvimport.NewService(csvImportStore)

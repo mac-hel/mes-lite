@@ -1,6 +1,7 @@
 package machines
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -9,12 +10,17 @@ import (
 
 // Handler exposes fake machine integration endpoints.
 type Handler struct {
-	store Store
+	receiver EventReceiver
+}
+
+// EventReceiver defines machine event intake behavior needed by HTTP.
+type EventReceiver interface {
+	ReceiveEvent(ctx context.Context, cmd ReceiveEventCommand) (Event, error)
 }
 
 // NewHandler creates a machine handler.
-func NewHandler(store Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(receiver EventReceiver) *Handler {
+	return &Handler{receiver: receiver}
 }
 
 // CreateMachineEventRequest is the fake machine event JSON body.
@@ -48,14 +54,22 @@ func (h *Handler) CreateEvent(c fuego.ContextWithBody[CreateMachineEventRequest]
 		return EventResponse{}, err
 	}
 
-	event, err := NewEvent(c.PathParam("machineId"), body.ExternalEventID, body.Type, body.OccurredAt, body.ProductSKU, body.Quantity, body.Workstation, body.Message)
+	event, err := h.receiver.ReceiveEvent(c.Context(), ReceiveEventCommand{
+		MachineID:       c.PathParam("machineId"),
+		ExternalEventID: body.ExternalEventID,
+		Type:            body.Type,
+		OccurredAt:      body.OccurredAt,
+		ProductSKU:      body.ProductSKU,
+		Quantity:        body.Quantity,
+		Workstation:     body.Workstation,
+		Message:         body.Message,
+	})
 	if err != nil {
-		return EventResponse{}, machineEventError(err)
-	}
-
-	if err := h.store.Save(c.Context(), event); err != nil {
 		if errors.Is(err, ErrInvalidEvent) {
 			return EventResponse{}, machineEventError(err)
+		}
+		if errors.Is(err, ErrEventConflict) {
+			return EventResponse{}, fuego.ConflictError{Err: err, Detail: err.Error()}
 		}
 		return EventResponse{}, err
 	}

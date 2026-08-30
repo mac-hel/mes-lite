@@ -1,6 +1,7 @@
 package machines
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -34,5 +35,44 @@ func TestInMemoryStoreSaveAndList(t *testing.T) {
 	}
 	if again[0].MachineID != "machine-1" {
 		t.Fatalf("expected store snapshot to be isolated, got %q", again[0].MachineID)
+	}
+}
+
+func TestInMemoryStoreRejectsDuplicateExternalEvent(t *testing.T) {
+	store := NewInMemoryStore()
+	event, err := NewEvent("machine-1", "external-1", EventTypeCycleCompleted, time.Now(), "sku-1", 2, "ws-1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Save(t.Context(), event); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(t.Context(), event); !errors.Is(err, ErrDuplicateEvent) {
+		t.Fatalf("expected ErrDuplicateEvent, got %v", err)
+	}
+}
+
+func TestInMemoryStoreFindByExternalEventID(t *testing.T) {
+	store := NewInMemoryStore()
+	event, err := NewEvent("machine-1", "external-1", EventTypeCycleCompleted, time.Now(), "sku-1", 2, "ws-1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(t.Context(), event); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := store.FindByExternalEventID(t.Context(), "machine-1", "external-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.ID != event.ID {
+		t.Fatalf("expected event %q, got %q", event.ID, found.ID)
+	}
+
+	_, err = store.FindByExternalEventID(t.Context(), "machine-1", "missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

@@ -830,7 +830,7 @@ func TestMachineEventRouteAllowsManagerRole(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
 	machineStore := machines.NewInMemoryStore()
-	RegisterMachineRoutes(s, authM, machines.NewHandler(machineStore))
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewService(machineStore)))
 
 	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
@@ -855,7 +855,8 @@ func TestMachineEventRouteAllowsManagerRole(t *testing.T) {
 func TestMachineEventRouteForbidsWorkerRole(t *testing.T) {
 	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewInMemoryStore()))
+	machineStore := machines.NewInMemoryStore()
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewService(machineStore)))
 
 	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
@@ -872,7 +873,8 @@ func TestMachineEventRouteForbidsWorkerRole(t *testing.T) {
 func TestMachineEventRouteRequiresAuthentication(t *testing.T) {
 	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
-	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewInMemoryStore()))
+	machineStore := machines.NewInMemoryStore()
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewService(machineStore)))
 
 	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
