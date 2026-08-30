@@ -67,14 +67,16 @@ func (t Type) String() string {
 // Job is a value type. The queue owns the canonical copy and hands out copies,
 // so callers can never mutate tracked job state by accident.
 type Job struct {
-	ID         string
-	Type       Type
-	Status     Status
-	Payload    []byte
-	EnqueuedAt time.Time
-	StartedAt  time.Time
-	FinishedAt time.Time
-	Error      string
+	ID              string
+	Type            Type
+	Status          Status
+	Payload         []byte
+	Progress        int
+	CancelRequested bool
+	EnqueuedAt      time.Time
+	StartedAt       time.Time
+	FinishedAt      time.Time
+	Error           string
 }
 
 // NewJob creates a queued background job and copies the payload so the caller
@@ -107,6 +109,9 @@ func (j Job) Validate() error {
 	}
 	if !j.Status.Valid() {
 		return fmt.Errorf("status %q is not supported: %w", j.Status, ErrInvalidJob)
+	}
+	if j.Progress < 0 || j.Progress > 100 {
+		return fmt.Errorf("progress must be between 0 and 100: %w", ErrInvalidJob)
 	}
 	if j.EnqueuedAt.IsZero() {
 		return fmt.Errorf("enqueued at is required: %w", ErrInvalidJob)

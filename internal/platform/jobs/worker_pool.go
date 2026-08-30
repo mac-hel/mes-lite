@@ -24,6 +24,8 @@ type WorkerPool struct {
 	handlers    map[Type]Handler
 	now         func() time.Time
 
+	mu        sync.Mutex
+	running   map[string]context.CancelFunc
 	startOnce sync.Once
 	stopOnce  sync.Once
 	wg        sync.WaitGroup
@@ -52,6 +54,7 @@ func NewWorkerPool(queue *Queue, workerCount int, handlers map[Type]Handler) (*W
 		workerCount: workerCount,
 		handlers:    copiedHandlers,
 		now:         time.Now,
+		running:     make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -100,6 +103,27 @@ func (p *WorkerPool) Stop(ctx context.Context) error {
 	}
 }
 
+// Cancel requests cancellation for one job. Running jobs receive context
+// cancellation; queued jobs are marked cancelled before a worker can start them.
+func (p *WorkerPool) Cancel(ctx context.Context, id string) (Job, error) {
+	job, err := p.queue.RequestCancellation(ctx, id, p.now())
+	if err != nil {
+		return Job{}, err
+	}
+	if job.Status == StatusRunning {
+		p.mu.Lock()
+		cancel := p.running[id]
+		p.mu.Unlock()
+		if cancel != nil {
+			// This does not kill the worker goroutine. It closes the job context's
+			// Done channel so a cooperative handler can notice cancellation, clean up
+			// with defers and return context.Canceled.
+			cancel()
+		}
+	}
+	return job, nil
+}
+
 func (p *WorkerPool) work(ctx context.Context) {
 	defer p.wg.Done()
 
@@ -118,6 +142,26 @@ func (p *WorkerPool) execute(ctx context.Context, id string) {
 	if err != nil {
 		return
 	}
+	// Each job gets its own child context. The worker context stops the whole
+	// pool; this child context lets Cancel stop one running job without stopping
+	// every worker.
+	jobCtx, cancel := context.WithCancel(ctx)
+	p.mu.Lock()
+	// Store only the cancel function, not the job itself. The queue remains the
+	// owner of job state; this map is just the cancellation wiring for currently
+	// running handlers.
+	p.running[job.ID] = cancel
+	p.mu.Unlock()
+	defer func() {
+		// Always call cancel when the job finishes, even after success. It releases
+		// context resources and wakes any child operation still waiting on Done.
+		cancel()
+		p.mu.Lock()
+		// After this point a user can no longer cancel this job through the running
+		// map. Terminal state is already recorded in the queue.
+		delete(p.running, job.ID)
+		p.mu.Unlock()
+	}()
 
 	handler := p.handlers[job.Type]
 	if handler == nil {
@@ -125,10 +169,27 @@ func (p *WorkerPool) execute(ctx context.Context, id string) {
 		return
 	}
 
-	if err := handler(ctx, job.clone()); err != nil {
+	if err := handler(jobCtx, job.clone()); err != nil {
+		if errors.Is(err, context.Canceled) && p.cancelRequested(job.ID) {
+			// A handler that returns context.Canceled after a recorded cancel request
+			// completed cooperatively, so the final job state is cancelled, not failed.
+			_, _ = p.queue.MarkCancelled(context.Background(), job.ID, p.now())
+			return
+		}
 		_, _ = p.queue.MarkFailed(context.Background(), job.ID, err.Error(), p.now())
+		return
+	}
+	if p.cancelRequested(job.ID) {
+		// The handler may return nil after noticing cancellation and doing cleanup.
+		// The queue's cancellation flag still decides the final state.
+		_, _ = p.queue.MarkCancelled(context.Background(), job.ID, p.now())
 		return
 	}
 
 	_, _ = p.queue.MarkSucceeded(context.Background(), job.ID, p.now())
+}
+
+func (p *WorkerPool) cancelRequested(id string) bool {
+	requested, err := p.queue.CancellationRequested(context.Background(), id)
+	return err == nil && requested
 }

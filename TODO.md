@@ -78,8 +78,31 @@ e.g. remove `request_id <> ''` from `production_entries.request_id` index
 remove `NOT VALID` from migrations/0004_add_production_reference_foreign_keys.sql
 check other migrations
 
+## config from environment
+Analyze what settings from code should be read from env on start
+
+## move all "Lesson Scope" and "Lesson Completion Notes" out of ROADMAP
+to lessons dir
 
 
+Questions:
+1. What `cancel()` does in following context (WorkerPool.execute method):
+```
+	jobCtx, cancel := context.WithCancel(ctx)
+	p.mu.Lock()
+	p.running[job.ID] = cancel
+	p.mu.Unlock()
+	defer func() {
+		cancel()
+		p.mu.Lock()
+		delete(p.running, job.ID)
+		p.mu.Unlock()
+	}()
+```
+2. How job handler knows that it is cancelled and how it handles cleanup? Give example.
+
+Please add comments explaining above to code where appropriate - I want code reader to understand cancellation flow.
+Also add to `docs/04-development/` directory markdown file with examples hot to use worker pool and queue.
 
 ## Conversion Learn->Real Project
 1. documentation/knowledge for AI (AI-driven development)
@@ -108,10 +131,87 @@ input:
 
 
 ## System design documents
+I added two new files to this ChatGPT Project's sources:
+- `MESLite-marketing-concept.md`
+- `MESLite-product-description.md`
+
+Read and analyze these files together with the sources and conversations you considered previously.
+Then **re-evaluate your previous assessment** of whether there is enough information to create `product-context.md`.
+Provide a **short summary of your updated findings**. Do not create or modify `product-context.md` yet.
+
+Most importantly, identify **all questions I need to answer** to close the remaining:
+* information gaps,
+* ambiguities,
+* inconsistencies,
+* contradictions,
+* unclear product decisions,
+* and assumptions that would otherwise need to be made.
+
+Prioritize the questions that are most important for creating an accurate `product-context.md`.
+For each question, briefly explain **why the answer matters** or what part of the product context it affects.
+
+Do not ask questions that can already be answered confidently from the available sources. Where the sources provide conflicting information, explicitly point out the conflict and ask me to resolve it.
+
+
+
+
+I will use an AI Agent to develop the **MESLite** project.
+
+In this ChatGPT Project's sources, there is a file named `MESLite-documentation-guide.md`. It defines the set of documents intended to support AI-driven development of MESLite.
+
+I want to eventually create a `product-context.md` document.
+
+## Your task
+
+Before creating anything, analyze whether there is **enough reliable and sufficiently detailed information** available to create a high-quality product-context.md.
+
+Use and cross-reference the following sources:
+
+1. **This ChatGPT Project's conversation history**, where relevant.
+2. **Primarily this specific chat**, which contains the main discussion about the MESLite product:
+`https://chatgpt.com/g/g-p-6a8336554548819186fb62fa5638ce06-mes-lite/c/6a833b59-d6f8-83eb-b4a0-19fd9e47e219`
+3. **All relevant Markdown files uploaded to this ChatGPT Project's sources**.
+
+## What I want you to assess
+
+Determine:
+* What information about MESLite is already available.
+* Whether that information is sufficient to produce `product-context.md` according to the documentation guidance in `MESLite-documentation-guide.md`.
+* Which important pieces of product context are well established and which are ambiguous, incomplete, or missing.
+* Whether there are contradictions between the available sources that should be resolved before creating the document.
+* What additional information, if any, I should provide before `product-context.md` can be created confidently.
+* Whether some information should be inferred from the existing material, and clearly distinguish such inferences from explicitly stated facts.
+
+## Important constraints
+
+* **Do NOT create or write** `product-context.md` yet.
+* Do **not** fill gaps by inventing assumptions.
+* Do **not** treat uncertain or inferred information as established facts.
+* Focus on assessing the available information and identifying gaps.
+* If the available information is sufficient, explain **why** it is sufficient and what the resulting document would be able to cover.
+* If it is insufficient, provide a **concrete list of missing or unclear information**, preferably organized by priority.
+
+## Expected output
+
+Give me an assessment structured roughly as:
+1. **Overall assessment** — whether we have enough information to create `product-context.md`.
+2. **What is already known** — key product context supported by the sources.
+3. **Confidence / evidence** — distinguish explicit facts, strong inferences, and uncertainties.
+4. **Gaps and unresolved questions** — information that is missing or needs clarification.
+5. **Contradictions or inconsistencies** — if any exist between sources.
+6. **Recommendation** — whether to proceed with creating `product-context.md` now or gather more information first.
+
+Again: **do not create `product-context.md` in this step**.
+
+
 I will use AI Agent to develop MESLite project.
-What documents I need to provide sufficient information about this project, for AI to:
+Create markdown document that will contain all above arrangements.
+Keep documents precise and as concise and condensed as possible.
+Documents must provide sufficient information about this project for AI to develop and maintain this project.
+Based on these documents, the AI should be able to:
+- understand general project idea
 - understand business context
 - understand business requirements
-
-Please create system architecture document (not sure what should be professional name for this kind of document) that will contain above arrangements.
-It should be suitable as part of AI-driven setup documentation. It should provide sufficient information to make AI understand
+- understand system architecture
+- understand code architecture and how to stick to it
+- anything else to develop and maintain project successfuly and according to best practices

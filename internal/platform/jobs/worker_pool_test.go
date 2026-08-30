@@ -241,6 +241,88 @@ func TestWorkerPool_StopIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestWorkerPool_CancelQueuedJob(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+	pool, err := NewWorkerPool(queue, 1, map[Type]Handler{
+		TypeProductionEntryImport: func(context.Context, Job) error {
+			t.Fatal("cancelled queued job should not execute")
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := pool.Cancel(ctx, "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != StatusCancelled {
+		t.Fatalf("expected queued job to be cancelled, got %q", job.Status)
+	}
+
+	pool.Start(ctx)
+	if err := stopPool(t, pool); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkerPool_CancelRunningJob(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+	started := make(chan struct{})
+
+	pool, err := NewWorkerPool(queue, 1, map[Type]Handler{
+		TypeProductionEntryImport: func(ctx context.Context, job Job) error {
+			if _, err := queue.ReportProgress(ctx, job.ID, 50); err != nil {
+				return err
+			}
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	pool.Start(ctx)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("expected job to start")
+	}
+
+	job, err := pool.Cancel(ctx, "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != StatusRunning || !job.CancelRequested {
+		t.Fatalf("expected running job with cancellation requested, got %+v", job)
+	}
+	if err := stopPool(t, pool); err != nil {
+		t.Fatal(err)
+	}
+
+	tracked, err := queue.Find(ctx, "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tracked.Status != StatusCancelled {
+		t.Fatalf("expected cancelled job, got %q", tracked.Status)
+	}
+	if tracked.Progress != 50 {
+		t.Fatalf("expected progress to be preserved, got %d", tracked.Progress)
+	}
+}
+
 func stopPool(t *testing.T, pool *WorkerPool) error {
 	t.Helper()
 

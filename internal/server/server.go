@@ -18,6 +18,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
+	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	"github.com/mac-hel/mes-lite/internal/platform/version"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
@@ -95,6 +96,19 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 	}
 
 	return &Server{Server: s, cfg: cfg}
+}
+
+// RegisterJobRoutes registers operational background-job routes.
+func RegisterJobRoutes(s *Server, authMiddleware *auth.Middleware, jobsHandler *jobs.HTTPHandler) {
+	if jobsHandler == nil {
+		return
+	}
+
+	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
+	manageJobs := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
+
+	fuego.Get(s.Server, "/jobs/{id}", jobsHandler.Get, manageJobs)
+	fuego.Put(s.Server, "/jobs/{id}/cancel", jobsHandler.Cancel, manageJobs)
 }
 
 type readyResponse struct{}

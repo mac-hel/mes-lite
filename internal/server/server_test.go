@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
+	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -696,6 +698,88 @@ func TestProductionEntryImportRejectsInvalidCSVHeader(t *testing.T) {
 	}
 }
 
+func TestJobStatusRouteAllowsManagers(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	jobQueue, jobWorkers, jobsH := testJobHandlers(t)
+	RegisterJobRoutes(s, authM, jobsH)
+
+	if err := jobQueue.Enqueue(t.Context(), newServerTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs/job-1", nil)
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response jobs.JobResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "job-1" || response.Status != jobs.StatusQueued.String() {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+
+	if err := stopServerTestWorkers(t, jobWorkers); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestJobStatusRouteRejectsWorkers(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	_, jobWorkers, jobsH := testJobHandlers(t)
+	RegisterJobRoutes(s, authM, jobsH)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs/job-1", nil)
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if err := stopServerTestWorkers(t, jobWorkers); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelJobRouteAllowsAdmins(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	jobQueue, jobWorkers, jobsH := testJobHandlers(t)
+	RegisterJobRoutes(s, authM, jobsH)
+
+	if err := jobQueue.Enqueue(t.Context(), newServerTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/jobs/job-1/cancel", nil)
+	setAuthorization(t, req, tokens, auth.RoleAdmin)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response jobs.JobResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Status != jobs.StatusCancelled.String() || !response.CancelRequested {
+		t.Fatalf("expected cancelled response, got %+v", response)
+	}
+
+	if err := stopServerTestWorkers(t, jobWorkers); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager, role auth.Role) {
 	t.Helper()
 	user, err := auth.NewUser("user-1", "user@example.com", "secret", role)
@@ -707,6 +791,35 @@ func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager
 		t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+func testJobHandlers(t *testing.T) (*jobs.Queue, *jobs.WorkerPool, *jobs.HTTPHandler) {
+	t.Helper()
+
+	queue := jobs.NewQueue(4)
+	workers, err := jobs.NewWorkerPool(queue, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return queue, workers, jobs.NewHTTPHandler(queue, workers)
+}
+
+func newServerTestJob(t *testing.T, id string) jobs.Job {
+	t.Helper()
+
+	job, err := jobs.NewJob(id, jobs.TypeProductionEntryImport, nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return job
+}
+
+func stopServerTestWorkers(t *testing.T, workers *jobs.WorkerPool) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	return workers.Stop(ctx)
 }
 
 func mustTime(t *testing.T, value string) time.Time {

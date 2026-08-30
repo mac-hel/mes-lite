@@ -310,6 +310,100 @@ func TestQueue_StatusTransitionsRejectInvalidMoves(t *testing.T) {
 	}
 }
 
+func TestQueue_ReportProgress(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.MarkRunning(ctx, "job-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := queue.ReportProgress(ctx, "job-1", 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Progress != 42 {
+		t.Fatalf("expected progress 42, got %d", job.Progress)
+	}
+
+	tracked, err := queue.Find(ctx, "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tracked.Progress != 42 {
+		t.Fatalf("expected tracked progress 42, got %d", tracked.Progress)
+	}
+}
+
+func TestQueue_ReportProgressRejectsInvalidStateAndValue(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "job-1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.ReportProgress(ctx, "job-1", 10); !errors.Is(err, ErrInvalidStatusTransition) {
+		t.Fatalf("expected queued progress to be rejected, got %v", err)
+	}
+	if _, err := queue.MarkRunning(ctx, "job-1", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.ReportProgress(ctx, "job-1", 101); !errors.Is(err, ErrInvalidProgress) {
+		t.Fatalf("expected invalid progress to return ErrInvalidProgress, got %v", err)
+	}
+}
+
+func TestQueue_RequestCancellation(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(2)
+	requestedAt := time.Date(2026, 8, 29, 12, 0, 0, 0, time.FixedZone("CEST", 2*60*60))
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "queued")); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := queue.RequestCancellation(ctx, "queued", requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued.Status != StatusCancelled {
+		t.Fatalf("expected queued job to be cancelled, got %q", queued.Status)
+	}
+	if !queued.CancelRequested {
+		t.Fatal("expected cancel request to be recorded")
+	}
+	if !queued.FinishedAt.Equal(requestedAt.UTC()) {
+		t.Fatalf("expected UTC finished timestamp, got %s", queued.FinishedAt)
+	}
+
+	if err := queue.Enqueue(ctx, newTestJob(t, "running")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := queue.MarkRunning(ctx, "running", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	running, err := queue.RequestCancellation(ctx, "running", requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if running.Status != StatusRunning {
+		t.Fatalf("expected running job to stay running until worker stops, got %q", running.Status)
+	}
+	if !running.CancelRequested {
+		t.Fatal("expected running cancel request to be recorded")
+	}
+
+	cancelled, err := queue.MarkCancelled(ctx, "running", requestedAt.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != StatusCancelled {
+		t.Fatalf("expected cancelled status, got %q", cancelled.Status)
+	}
+}
+
 // TestQueue_ConcurrentProducersAndConsumers is written for `go test -race`:
 // every enqueued job must be handed to exactly one consumer.
 func TestQueue_ConcurrentProducersAndConsumers(t *testing.T) {

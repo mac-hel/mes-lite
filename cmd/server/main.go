@@ -17,6 +17,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/employees"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
+	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -95,8 +96,24 @@ func run() int {
 
 	csvImportStore := csvimport.NewPostgresStore(db)
 	csvImportHandler := csvimport.NewHandler(csvimport.NewService(csvImportStore))
+	jobQueue := jobs.NewQueue(jobs.DefaultQueueCapacity)
+	jobWorkers, err := jobs.NewWorkerPool(jobQueue, jobs.DefaultWorkerCount, nil)
+	if err != nil {
+		slog.Error("create background worker pool", "err", err)
+		return 1
+	}
+	jobWorkers.Start(ctx)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := jobWorkers.Stop(shutdownCtx); err != nil {
+			slog.Error("stop background worker pool", "err", err)
+		}
+	}()
+	jobsHandler := jobs.NewHTTPHandler(jobQueue, jobWorkers)
 
 	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
+	server.RegisterJobRoutes(srv, authMiddleware, jobsHandler)
 
 	if err := srv.Start(ctx); err != nil {
 		slog.Error("server shutdown with error", "err", err)

@@ -27,6 +27,9 @@ var ErrAlreadyExists = errors.New("background job already exists")
 // ErrInvalidStatusTransition is returned when a job cannot move between two lifecycle states.
 var ErrInvalidStatusTransition = errors.New("invalid background job status transition")
 
+// ErrInvalidProgress is returned when reported job progress is outside 0..100.
+var ErrInvalidProgress = errors.New("invalid background job progress")
+
 // Queue is an in-memory FIFO queue of background jobs.
 //
 // It owns two pieces of state with different jobs to do:
@@ -186,6 +189,31 @@ func (q *Queue) MarkSucceeded(ctx context.Context, id string, finishedAt time.Ti
 	return q.markFinished(ctx, id, StatusSucceeded, "", finishedAt)
 }
 
+// MarkCancelled moves a queued or running job to cancelled and records its finish time.
+func (q *Queue) MarkCancelled(ctx context.Context, id string, finishedAt time.Time) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status.Terminal() {
+		return job.clone(), nil
+	}
+
+	job.Status = StatusCancelled
+	job.CancelRequested = true
+	job.FinishedAt = finishedAt.UTC()
+	q.jobs[id] = job
+
+	return job.clone(), nil
+}
+
 // MarkFailed moves a running job to failed and records the failure message.
 func (q *Queue) MarkFailed(ctx context.Context, id string, message string, finishedAt time.Time) (Job, error) {
 	message = strings.TrimSpace(message)
@@ -212,11 +240,77 @@ func (q *Queue) markFinished(ctx context.Context, id string, status Status, mess
 	}
 
 	job.Status = status
+	if status == StatusSucceeded {
+		job.Progress = 100
+	}
 	job.FinishedAt = finishedAt.UTC()
 	job.Error = message
 	q.jobs[id] = job
 
 	return job.clone(), nil
+}
+
+// ReportProgress records the latest progress percentage for a running job.
+func (q *Queue) ReportProgress(ctx context.Context, id string, progress int) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+	if progress < 0 || progress > 100 {
+		return Job{}, fmt.Errorf("progress %d must be between 0 and 100: %w", progress, ErrInvalidProgress)
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status != StatusRunning {
+		return Job{}, fmt.Errorf("job %q cannot report progress while %q: %w", id, job.Status, ErrInvalidStatusTransition)
+	}
+
+	job.Progress = progress
+	q.jobs[id] = job
+
+	return job.clone(), nil
+}
+
+// RequestCancellation records a cancellation request. Queued jobs are cancelled
+// immediately; running jobs must observe their context and stop cooperatively.
+func (q *Queue) RequestCancellation(ctx context.Context, id string, requestedAt time.Time) (Job, error) {
+	if err := ctx.Err(); err != nil {
+		return Job{}, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return Job{}, fmt.Errorf("background job %q: %w", id, ErrNotFound)
+	}
+	if job.Status.Terminal() {
+		return job.clone(), nil
+	}
+
+	job.CancelRequested = true
+	if job.Status == StatusQueued {
+		job.Status = StatusCancelled
+		job.FinishedAt = requestedAt.UTC()
+	}
+	q.jobs[id] = job
+
+	return job.clone(), nil
+}
+
+// CancellationRequested reports whether a job has an active cancellation request.
+func (q *Queue) CancellationRequested(ctx context.Context, id string) (bool, error) {
+	job, err := q.Find(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	return job.CancelRequested, nil
 }
 
 // Len returns how many jobs are waiting for a consumer.
