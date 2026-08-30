@@ -41,15 +41,16 @@ ANSWER: Do not introduce int IDs just for speed right now. Keep one canonical id
 ## <ADDED> Sanity tests
 Should we introduce sanity tests? Either implement new ones or convert some existing tests.
 
-## cross-cutting/infra dir?
+## <DONE> cross-cutting/infra dir?
 Currently `internal/` contains mix of business, infra (postgres, server, auth, version), config and helper packages.
 I am considering to separate business slices by moving non-business packages into separate directory.
 What is your take on this?
+HOW: `internal/platform/` dir where non-buss packages were moved
 
 ## validation library
 Is there a place for validation library in the project, in any package, in any layer?
 
-## pipeline
+## CI/CD pipeline
 inspect and make it useful
 
 ## golangci-lint
@@ -67,7 +68,7 @@ inspect and make it useful
 What if company runs multiple factories?
 Should production be managed separately, but in single system?
 
-## Multiple Clients
+## <SEE CHATGPT CONVERSATION> Multiple Clients
 - Separate or single repository for each client?
 - Should they have any common core?
 - How organize development and deploys?
@@ -83,6 +84,8 @@ Analyze what settings from code should be read from env on start
 
 ## move all "Lesson Scope" and "Lesson Completion Notes" out of ROADMAP
 to lessons dir
+
+
 
 
 Questions:
@@ -102,7 +105,7 @@ Questions:
 2. How job handler knows that it is cancelled and how it handles cleanup? Give example.
 
 Please add comments explaining above to code where appropriate - I want code reader to understand cancellation flow.
-Also add to `docs/04-development/` directory markdown file with examples hot to use worker pool and queue.
+Also add markdown file with examples how to use worker pool and queue. Place this file in `docs/04-development/` directory.
 
 ## Conversion Learn->Real Project
 1. documentation/knowledge for AI (AI-driven development)

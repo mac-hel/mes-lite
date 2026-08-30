@@ -13,6 +13,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/machines"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
@@ -822,6 +823,65 @@ func TestCancelJobRouteAllowsAdmins(t *testing.T) {
 
 	if err := stopServerTestWorkers(t, jobWorkers); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMachineEventRouteAllowsManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	machineStore := machines.NewInMemoryStore()
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machineStore))
+
+	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	events, err := machineStore.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 machine event, got %d", len(events))
+	}
+}
+
+func TestMachineEventRouteForbidsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewInMemoryStore()))
+
+	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestMachineEventRouteRequiresAuthentication(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewInMemoryStore()))
+
+	body := []byte(`{"externalEventId":"machine-event-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":2,"workstation":"ws-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/machines/machine-1/events", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

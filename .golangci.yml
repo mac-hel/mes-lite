@@ -35,6 +35,8 @@ linters:
               desc: platform packages must not import business slices
             - pkg: github.com/mac-hel/mes-lite/internal/employees
               desc: platform packages must not import business slices
+            - pkg: github.com/mac-hel/mes-lite/internal/machines
+              desc: platform packages must not import business slices
             - pkg: github.com/mac-hel/mes-lite/internal/orders
               desc: platform packages must not import business slices
             - pkg: github.com/mac-hel/mes-lite/internal/production

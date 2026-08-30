@@ -16,6 +16,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/auth"
 	"github.com/mac-hel/mes-lite/internal/csvimport"
 	"github.com/mac-hel/mes-lite/internal/employees"
+	"github.com/mac-hel/mes-lite/internal/machines"
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
@@ -112,6 +113,18 @@ func RegisterJobRoutes(s *Server, authMiddleware *auth.Middleware, jobsHandler *
 
 	fuego.Get(s.Server, "/jobs/{id}", jobsHandler.Get, manageJobs)
 	fuego.Put(s.Server, "/jobs/{id}/cancel", jobsHandler.Cancel, manageJobs)
+}
+
+// RegisterMachineRoutes registers fake machine integration routes.
+func RegisterMachineRoutes(s *Server, authMiddleware *auth.Middleware, machineHandler *machines.Handler) {
+	if machineHandler == nil {
+		return
+	}
+
+	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
+	manageMachines := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
+
+	fuego.Post(s.Server, "/machines/{machineId}/events", machineHandler.CreateEvent, manageMachines)
 }
 
 type readyResponse struct{}
