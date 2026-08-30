@@ -241,6 +241,42 @@ func TestWorkerPool_StopIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestWorkerPool_StopBeforeStart(t *testing.T) {
+	pool, err := NewWorkerPool(NewQueue(1), 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := stopPool(t, pool); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkerPool_ConcurrentStartAndStop(t *testing.T) {
+	ctx := t.Context()
+	queue := NewQueue(1)
+	pool, err := NewWorkerPool(queue, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			pool.Start(ctx)
+		}()
+		go func() {
+			defer wg.Done()
+			if err := stopPool(t, pool); err != nil {
+				t.Errorf("stop pool: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
 func TestWorkerPool_CancelQueuedJob(t *testing.T) {
 	ctx := t.Context()
 	queue := NewQueue(1)

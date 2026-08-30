@@ -26,6 +26,8 @@ type WorkerPool struct {
 
 	mu        sync.Mutex
 	running   map[string]context.CancelFunc
+	lifecycle sync.Mutex
+	started   bool
 	startOnce sync.Once
 	stopOnce  sync.Once
 	wg        sync.WaitGroup
@@ -65,8 +67,12 @@ func (p *WorkerPool) Start(ctx context.Context) {
 	}
 
 	p.startOnce.Do(func() {
+		p.lifecycle.Lock()
+		defer p.lifecycle.Unlock()
+
 		workerCtx, cancel := context.WithCancel(ctx)
 		p.cancel = cancel
+		p.started = true
 
 		for range p.workerCount {
 			p.wg.Add(1)
@@ -85,6 +91,12 @@ func (p *WorkerPool) Stop(ctx context.Context) error {
 	p.stopOnce.Do(func() {
 		p.queue.Close()
 	})
+	p.lifecycle.Lock()
+	started := p.started
+	p.lifecycle.Unlock()
+	if !started {
+		return nil
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -96,10 +108,17 @@ func (p *WorkerPool) Stop(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		if p.cancel != nil {
-			p.cancel()
-		}
+		p.cancelWorkers()
 		return ctx.Err()
+	}
+}
+
+func (p *WorkerPool) cancelWorkers() {
+	p.lifecycle.Lock()
+	cancel := p.cancel
+	p.lifecycle.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
