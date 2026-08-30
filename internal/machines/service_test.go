@@ -2,6 +2,7 @@ package machines
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -76,6 +77,63 @@ func TestServiceReceiveEventRejectsInvalidEvent(t *testing.T) {
 	_, err := service.ReceiveEvent(t.Context(), cmd)
 	if !errors.Is(err, ErrInvalidEvent) {
 		t.Fatalf("expected ErrInvalidEvent, got %v", err)
+	}
+}
+
+func TestServiceReceiveEventConcurrentIdenticalRetriesStoreOneEvent(t *testing.T) {
+	store := NewInMemoryStore()
+	service := NewService(store)
+	cmd := validReceiveEventCommand()
+	const callers = 50
+	start := make(chan struct{})
+	results := make(chan Event, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			event, err := service.ReceiveEvent(t.Context(), cmd)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- event
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var id string
+	seen := 0
+	for event := range results {
+		seen++
+		if id == "" {
+			id = event.ID
+			continue
+		}
+		if event.ID != id {
+			t.Fatalf("expected all retries to return event ID %q, got %q", id, event.ID)
+		}
+	}
+	if seen != callers {
+		t.Fatalf("expected %d results, got %d", callers, seen)
+	}
+	events, err := store.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one stored event, got %d", len(events))
 	}
 }
 

@@ -2,6 +2,8 @@ package machines
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -74,5 +76,40 @@ func TestInMemoryStoreFindByExternalEventID(t *testing.T) {
 	_, err = store.FindByExternalEventID(t.Context(), "machine-1", "missing")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestInMemoryStoreZeroValueSupportsConcurrentSaves(t *testing.T) {
+	var store InMemoryStore
+	const count = 100
+	var wg sync.WaitGroup
+	errs := make(chan error, count)
+
+	for i := range count {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			event, err := NewEvent("machine-1", fmt.Sprintf("external-%d", i), EventTypeCycleCompleted, time.Now(), "sku-1", 1, "ws-1", "")
+			if err != nil {
+				errs <- err
+				return
+			}
+			errs <- store.Save(t.Context(), event)
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	events, err := store.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != count {
+		t.Fatalf("expected %d events, got %d", count, len(events))
 	}
 }

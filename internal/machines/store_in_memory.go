@@ -8,14 +8,19 @@ import (
 
 // NewInMemoryStore creates an in-memory machine event store.
 func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{byExternalID: make(map[string]Event)}
+	return &InMemoryStore{}
 }
 
 // InMemoryStore stores machine events in process memory.
 type InMemoryStore struct {
+	initOnce     sync.Once
 	mu           sync.RWMutex
 	events       []Event
 	byExternalID map[string]Event
+}
+
+func (s *InMemoryStore) init() {
+	s.byExternalID = make(map[string]Event)
 }
 
 // Save stores one machine event.
@@ -23,14 +28,12 @@ func (s *InMemoryStore) Save(_ context.Context, event Event) error {
 	if err := event.Validate(); err != nil {
 		return err
 	}
+	s.initOnce.Do(s.init)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	key := externalEventKey(event.MachineID, event.ExternalEventID)
-	if s.byExternalID == nil {
-		s.byExternalID = make(map[string]Event)
-	}
 	if _, ok := s.byExternalID[key]; ok {
 		return fmt.Errorf("machine event %q/%q: %w", event.MachineID, event.ExternalEventID, ErrDuplicateEvent)
 	}
@@ -42,6 +45,8 @@ func (s *InMemoryStore) Save(_ context.Context, event Event) error {
 
 // FindByExternalEventID looks up a machine event by machine and external event IDs.
 func (s *InMemoryStore) FindByExternalEventID(_ context.Context, machineID, externalEventID string) (Event, error) {
+	s.initOnce.Do(s.init)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
