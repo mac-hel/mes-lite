@@ -109,6 +109,33 @@ func TestCreateEventReturnsConflictForDifferentRetryPayload(t *testing.T) {
 	}
 }
 
+func TestStats(t *testing.T) {
+	service := NewService(NewInMemoryStore())
+	handler := NewHandler(service)
+	server := fuego.NewServer()
+	fuego.Post(server, "/machines/{machineId}/events", handler.CreateEvent)
+	fuego.Get(server, "/machines/events/stats", handler.Stats)
+
+	body := []byte(`{"externalEventId":"external-1","type":"cycle_completed","occurredAt":"2026-08-30T10:30:00Z","productSku":"sku-1","quantity":3,"workstation":"ws-1"}`)
+	_ = postMachineEvent(t, server, body)
+	_ = postMachineEvent(t, server, body)
+
+	req := httptest.NewRequest(http.MethodGet, "/machines/events/stats", nil)
+	w := httptest.NewRecorder()
+	server.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response IntakeStatsResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Received != 2 || response.Accepted != 1 || response.DuplicateRetries != 1 {
+		t.Fatalf("unexpected stats response: %+v", response)
+	}
+}
+
 func postMachineEvent(t *testing.T, server *fuego.Server, body []byte) EventResponse {
 	t.Helper()
 

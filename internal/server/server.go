@@ -124,6 +124,7 @@ func RegisterMachineRoutes(s *Server, authMiddleware *auth.Middleware, machineHa
 	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
 	manageMachines := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
 
+	fuego.Get(s.Server, "/machines/events/stats", machineHandler.Stats, manageMachines)
 	fuego.Post(s.Server, "/machines/{machineId}/events", machineHandler.CreateEvent, manageMachines)
 }
 

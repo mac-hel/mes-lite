@@ -887,6 +887,38 @@ func TestMachineEventRouteRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestMachineStatsRouteAllowsManagerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	machineStore := machines.NewInMemoryStore()
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewService(machineStore)))
+
+	req := httptest.NewRequest(http.MethodGet, "/machines/events/stats", nil)
+	setAuthorization(t, req, tokens, auth.RoleManager)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestMachineStatsRouteForbidsWorkerRole(t *testing.T) {
+	authH, authM, tokens, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	machineStore := machines.NewInMemoryStore()
+	RegisterMachineRoutes(s, authM, machines.NewHandler(machines.NewService(machineStore)))
+
+	req := httptest.NewRequest(http.MethodGet, "/machines/events/stats", nil)
+	setAuthorization(t, req, tokens, auth.RoleWorker)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func setAuthorization(t *testing.T, req *http.Request, tokens *auth.TokenManager, role auth.Role) {
 	t.Helper()
 	user, err := auth.NewUser("user-1", "user@example.com", "secret", role)

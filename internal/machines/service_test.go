@@ -78,6 +78,32 @@ func TestServiceReceiveEventRejectsInvalidEvent(t *testing.T) {
 	if !errors.Is(err, ErrInvalidEvent) {
 		t.Fatalf("expected ErrInvalidEvent, got %v", err)
 	}
+
+	stats := service.Stats()
+	if stats.Received != 1 || stats.Invalid != 1 {
+		t.Fatalf("expected one received invalid event, got %+v", stats)
+	}
+}
+
+func TestServiceStatsCountsAcceptedRetriesAndConflicts(t *testing.T) {
+	service := NewService(NewInMemoryStore())
+	cmd := validReceiveEventCommand()
+
+	if _, err := service.ReceiveEvent(t.Context(), cmd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ReceiveEvent(t.Context(), cmd); err != nil {
+		t.Fatal(err)
+	}
+	cmd.Quantity = 99
+	if _, err := service.ReceiveEvent(t.Context(), cmd); !errors.Is(err, ErrEventConflict) {
+		t.Fatalf("expected ErrEventConflict, got %v", err)
+	}
+
+	stats := service.Stats()
+	if stats.Received != 3 || stats.Accepted != 1 || stats.DuplicateRetries != 1 || stats.Conflicts != 1 || stats.Invalid != 0 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
 }
 
 func TestServiceReceiveEventConcurrentIdenticalRetriesStoreOneEvent(t *testing.T) {
@@ -134,6 +160,10 @@ func TestServiceReceiveEventConcurrentIdenticalRetriesStoreOneEvent(t *testing.T
 	}
 	if len(events) != 1 {
 		t.Fatalf("expected one stored event, got %d", len(events))
+	}
+	stats := service.Stats()
+	if stats.Received != callers || stats.Accepted != 1 || stats.DuplicateRetries != callers-1 || stats.Conflicts != 0 || stats.Invalid != 0 {
+		t.Fatalf("unexpected stats after concurrent retries: %+v", stats)
 	}
 }
 

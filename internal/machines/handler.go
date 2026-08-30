@@ -11,6 +11,7 @@ import (
 // Handler exposes fake machine integration endpoints.
 type Handler struct {
 	receiver EventReceiver
+	stats    IntakeStatsProvider
 }
 
 // EventReceiver defines machine event intake behavior needed by HTTP.
@@ -18,9 +19,19 @@ type EventReceiver interface {
 	ReceiveEvent(ctx context.Context, cmd ReceiveEventCommand) (Event, error)
 }
 
+// IntakeStatsProvider defines machine event intake metrics needed by HTTP.
+type IntakeStatsProvider interface {
+	Stats() IntakeStats
+}
+
+type machineService interface {
+	EventReceiver
+	IntakeStatsProvider
+}
+
 // NewHandler creates a machine handler.
-func NewHandler(receiver EventReceiver) *Handler {
-	return &Handler{receiver: receiver}
+func NewHandler(service machineService) *Handler {
+	return &Handler{receiver: service, stats: service}
 }
 
 // CreateMachineEventRequest is the fake machine event JSON body.
@@ -45,6 +56,15 @@ type EventResponse struct {
 	Quantity        int       `json:"quantity"`
 	Workstation     string    `json:"workstation"`
 	Message         string    `json:"message"`
+}
+
+// IntakeStatsResponse is the HTTP representation of fake machine intake counters.
+type IntakeStatsResponse struct {
+	Received         uint64 `json:"received"`
+	Accepted         uint64 `json:"accepted"`
+	DuplicateRetries uint64 `json:"duplicateRetries"`
+	Conflicts        uint64 `json:"conflicts"`
+	Invalid          uint64 `json:"invalid"`
 }
 
 // CreateEvent handles POST /machines/{machineId}/events.
@@ -77,10 +97,19 @@ func (h *Handler) CreateEvent(c fuego.ContextWithBody[CreateMachineEventRequest]
 	return eventResponse(event), nil
 }
 
+// Stats handles GET /machines/events/stats.
+func (h *Handler) Stats(c fuego.ContextNoBody) (IntakeStatsResponse, error) {
+	return intakeStatsResponse(h.stats.Stats()), nil
+}
+
 func machineEventError(err error) fuego.BadRequestError {
 	return fuego.BadRequestError{Err: err, Detail: err.Error()}
 }
 
 func eventResponse(event Event) EventResponse {
 	return EventResponse(event)
+}
+
+func intakeStatsResponse(stats IntakeStats) IntakeStatsResponse {
+	return IntakeStatsResponse(stats)
 }
