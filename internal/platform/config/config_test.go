@@ -14,6 +14,8 @@ func TestLoadDefaults(t *testing.T) {
 	_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
 	_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
 	_ = os.Unsetenv("JWT_SECRET")
+	_ = os.Unsetenv("LOG_LEVEL")
+	_ = os.Unsetenv("LOG_FORMAT")
 
 	cfg := Load()
 
@@ -44,6 +46,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.JWTSecret != "" {
 		t.Error("expected empty jwt secret")
 	}
+
+	if cfg.LogLevel != "info" {
+		t.Errorf("expected default log level info, got %s", cfg.LogLevel)
+	}
+
+	if cfg.LogFormat != "json" {
+		t.Errorf("expected default log format json, got %s", cfg.LogFormat)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -54,6 +64,8 @@ func TestLoadFromEnv(t *testing.T) {
 	_ = os.Setenv("AUTH_BOOTSTRAP_EMAIL", "admin@example.com")
 	_ = os.Setenv("AUTH_BOOTSTRAP_PASSWORD", "secret")
 	_ = os.Setenv("JWT_SECRET", "jwt-secret-with-at-least-32-characters")
+	_ = os.Setenv("LOG_LEVEL", "debug")
+	_ = os.Setenv("LOG_FORMAT", "text")
 	defer func() {
 		_ = os.Unsetenv("HOST")
 		_ = os.Unsetenv("PORT")
@@ -62,6 +74,8 @@ func TestLoadFromEnv(t *testing.T) {
 		_ = os.Unsetenv("AUTH_BOOTSTRAP_EMAIL")
 		_ = os.Unsetenv("AUTH_BOOTSTRAP_PASSWORD")
 		_ = os.Unsetenv("JWT_SECRET")
+		_ = os.Unsetenv("LOG_LEVEL")
+		_ = os.Unsetenv("LOG_FORMAT")
 	}()
 
 	cfg := Load()
@@ -92,6 +106,14 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if cfg.JWTSecret != "jwt-secret-with-at-least-32-characters" {
 		t.Error("expected jwt secret from env")
+	}
+
+	if cfg.LogLevel != "debug" {
+		t.Errorf("expected log level from env, got %s", cfg.LogLevel)
+	}
+
+	if cfg.LogFormat != "text" {
+		t.Errorf("expected log format from env, got %s", cfg.LogFormat)
 	}
 }
 

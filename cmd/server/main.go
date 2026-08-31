@@ -19,6 +19,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
+	"github.com/mac-hel/mes-lite/internal/platform/logging"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -26,13 +27,18 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	os.Exit(run())
 }
 
 func run() int {
 	config.LoadDotEnv(".env")
 	cfg := config.Load()
+	logger, err := logging.New(os.Stdout, cfg.LogLevel, cfg.LogFormat)
+	if err != nil {
+		slog.Error("configure logger", "err", err)
+		return 1
+	}
+	slog.SetDefault(logger)
 	ctx := context.Background()
 
 	poolCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -120,6 +126,7 @@ func run() int {
 	jobsHandler := jobs.NewHTTPHandler(jobQueue, jobWorkers)
 
 	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
+	srv.SetLogger(logger)
 	server.RegisterJobRoutes(srv, authMiddleware, jobsHandler)
 	server.RegisterMachineRoutes(srv, authMiddleware, machineHandler)
 

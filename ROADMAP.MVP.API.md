@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.48
+**Version:** 2.49
 **Status:** IN PROGRESS
-**Current milestone:** 12 - Machine Integration & Synchronization
-**Current lesson:** L12.5 - Machine Integration Review & Milestone Closure
+**Current milestone:** 13 - Observability
+**Current lesson:** L13.2 - Request Logging & Correlation IDs
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -40,11 +40,12 @@ This section must always reflect the current progress.
 - Milestone 9
 - Milestone 10
 - Milestone 11
+- Milestone 12
 **Next milestone:** 14 - Performance Engineering
 **Current branch:** main
-**Architecture maturity:** 8.7 / 10
-**Go knowledge progress:** 78%
-**Interview readiness:** 74%
+**Architecture maturity:** 8.8 / 10
+**Go knowledge progress:** 79%
+**Interview readiness:** 75%
 **Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it. Background jobs are in-memory only, so queued, running and completed job history is lost on restart; ADR 0004 records the durable-queue trigger. Async CSV import jobs use temporary upload files, so process crashes can leave orphaned temp files and lose queued imports until durable job storage exists. Background job status and cancellation APIs exist for individual jobs, but there is no job list endpoint yet. Machine events are currently accepted through a fake JWT-protected API and stored in memory only; deduplication and intake counters are in-memory only, events are not durable, events are not processed into production entries and machines are not authenticated with real machine credentials yet. The generated sqlc boundary is documented but not enforced: `internal/csvimport` imports `internal/production/productiondb` directly, and nested `internal/` directories would make that a compile error once CSV import stops reusing another slice's generated insert. The depguard platform rule uses a deny list naming each business slice, so adding a slice requires updating `.golangci.yml`.
 
 The AI must update this section at the end of every lesson and milestone.
@@ -99,7 +100,7 @@ The AI should update it after every completed milestone.
 - [x] sync
 - [x] sync/atomic
 - [x] database/sql (concepts)
-- [ ] log/slog
+- [x] log/slog
 - [ ] runtime
 - [ ] embed
 
@@ -7704,11 +7705,111 @@ Status
 
 ### Lessons
 
-- **L13.1** — Structured Logging Foundation
+- **L13.1** — Structured Logging Foundation ✅
 - **L13.2** — Request Logging & Correlation IDs
 - **L13.3** — Prometheus Metrics
 - **L13.4** — OpenTelemetry Tracing
 - **L13.5** — Health, Readiness & Observability Review
+
+### Lesson 13.1 Scope
+
+Introduce a small structured logging foundation with `log/slog` and centralize logger setup before adding request logging, metrics or tracing.
+
+#### Business Context
+
+Operators need machine-readable logs when diagnosing startup failures, migration failures and server lifecycle events. Plain text messages are hard to filter and correlate once the service runs in containers or log aggregation systems.
+
+#### Problem
+
+The application already used `slog` directly in command entry points and server lifecycle code, but logger setup was duplicated and not configurable. The server package also depended on the global default logger for lifecycle messages, which made tests and future request-scoped logging less explicit.
+
+#### Design Discussion
+
+Logging remains a platform concern, not a business slice. `internal/platform/logging` now constructs a configured `*slog.Logger` using standard-library handlers. The application supports JSON logs by default because structured JSON is the common production shape for containerized services. Text logs remain available for local debugging.
+
+The lesson intentionally does not add request logging, correlation IDs, Prometheus metrics or OpenTelemetry. Those belong to later observability lessons so each concept remains clear.
+
+#### Go Concepts
+
+- `log/slog` structured logging
+- `slog.Logger` as an explicit dependency
+- `io.Writer` for testable log output
+- configuration parsing for log level and format
+- avoiding package-level globals where explicit injection is cheap
+
+#### Architecture Concepts
+
+- platform logging package below business slices
+- command entry points configure process-wide defaults
+- server lifecycle logging receives an explicit logger
+- observability foundation before request correlation and metrics
+
+### Lesson 13.1 Completion Notes
+
+#### Business Context
+
+MES Lite now has a configurable structured logging foundation for startup, migration and server lifecycle diagnostics.
+
+#### Problem
+
+Logger setup was duplicated in `cmd/server` and `cmd/migrate`, and the server package logged through the global `slog` default instead of an explicit dependency.
+
+#### Design Discussion
+
+Added `internal/platform/logging` with one `New` function that builds a `*slog.Logger` from an `io.Writer`, log level and format. JSON is the default because it is easy for production log collectors to parse. Text format remains available through `LOG_FORMAT=text` for local development.
+
+`cmd/server` and `cmd/migrate` now both configure the logger through the shared package and set it as the process default. `internal/server` receives an injected logger for lifecycle logs and uses a discard logger by default so tests stay quiet.
+
+#### Implementation
+
+- Added `internal/platform/logging`.
+- Added configurable JSON and text `slog` handlers.
+- Added log-level parsing for `debug`, `info`, `warn`, `warning` and `error`.
+- Added `LOG_LEVEL` and `LOG_FORMAT` configuration.
+- Defaulted logs to `LOG_LEVEL=info` and `LOG_FORMAT=json`.
+- Updated `cmd/server` and `cmd/migrate` to use the shared logging package.
+- Added `Server.SetLogger` and changed server lifecycle logs to use the injected logger.
+
+#### Tests
+
+- Added logging tests for JSON structured output.
+- Added logging tests for text output.
+- Added logging tests for level parsing and invalid configuration.
+- Updated configuration tests for logging defaults and environment values.
+- Verified with `go test ./internal/platform/config ./internal/platform/logging ./internal/server -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+Duplicated logger construction was removed from command entry points. Server lifecycle logging no longer relies directly on package-global logger state.
+
+#### Code Review
+
+An experienced Go engineer would approve this as a focused first observability step. It uses the standard library, keeps logging as platform plumbing and avoids introducing an external logging framework.
+
+The main follow-up is request logging with correlation IDs. Startup logs are structured now, but request-level diagnostics still need a middleware boundary.
+
+#### Exercises
+
+- Run the server with `LOG_FORMAT=text` and compare the output with JSON logs.
+- Add a test proving `LOG_LEVEL=error` suppresses info logs.
+- Decide which startup values are safe to log and which could leak secrets.
+
+#### Interview Questions
+
+- Why are structured logs more useful than plain formatted strings in production?
+- Why is `log/slog` preferable here to adding a third-party logger?
+- Why should secrets such as `JWT_SECRET` never be logged?
+- When is using `slog.Default()` acceptable, and when is explicit logger injection better?
+
+#### Roadmap Update
+
+- Lesson 13.1 completed.
+- Current lesson moved to Lesson 13.2.
+- Standard Library `log/slog` marked complete in the Knowledge Matrix.
 
 ### Goal
 

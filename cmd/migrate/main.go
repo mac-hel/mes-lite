@@ -13,16 +13,22 @@ import (
 	"github.com/pressly/goose/v3"
 
 	"github.com/mac-hel/mes-lite/internal/platform/config"
+	"github.com/mac-hel/mes-lite/internal/platform/logging"
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	os.Exit(run())
 }
 
 func run() int {
 	config.LoadDotEnv(".env")
 	cfg := config.Load()
+	logger, err := logging.New(os.Stdout, cfg.LogLevel, cfg.LogFormat)
+	if err != nil {
+		slog.Error("configure logger", "err", err)
+		return 1
+	}
+	slog.SetDefault(logger)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

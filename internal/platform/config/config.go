@@ -14,6 +14,8 @@ type Config struct {
 	AuthBootstrapEmail    string
 	AuthBootstrapPassword string
 	JWTSecret             string
+	LogLevel              string
+	LogFormat             string
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -24,6 +26,8 @@ func Load() Config {
 		Port:          9090,
 		DatabaseURL:   "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable",
 		MigrationsDir: "migrations",
+		LogLevel:      "info",
+		LogFormat:     "json",
 	}
 
 	if host := os.Getenv("HOST"); host != "" {
@@ -54,6 +58,14 @@ func Load() Config {
 
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		cfg.JWTSecret = secret
+	}
+
+	if level := os.Getenv("LOG_LEVEL"); level != "" {
+		cfg.LogLevel = level
+	}
+
+	if format := os.Getenv("LOG_FORMAT"); format != "" {
+		cfg.LogFormat = format
 	}
 
 	return cfg

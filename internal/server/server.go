@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -29,7 +30,8 @@ import (
 // Server wraps the Fuego HTTP server with application-specific configuration.
 type Server struct {
 	*fuego.Server
-	cfg config.Config
+	cfg    config.Config
+	logger *slog.Logger
 }
 
 // New creates a new Server with the given configuration and registers routes.
@@ -99,7 +101,15 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 		}
 	}
 
-	return &Server{Server: s, cfg: cfg}
+	return &Server{Server: s, cfg: cfg, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+}
+
+// SetLogger configures the logger used for server lifecycle messages.
+func (s *Server) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		return
+	}
+	s.logger = logger
 }
 
 // RegisterJobRoutes registers operational background-job routes.
@@ -161,15 +171,15 @@ func (s *Server) Start(ctx context.Context) error {
 	defer stop()
 
 	go func() {
-		slog.Info("server starting", "addr", s.cfg.Addr())
+		s.logger.Info("server starting", "addr", s.cfg.Addr())
 		if err := s.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("server error", "err", err)
+			s.logger.Error("server error", "err", err)
 			stop()
 		}
 	}()
 
 	<-ctx.Done()
-	slog.Info("shutting down...")
+	s.logger.Info("server shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return s.Shutdown(shutdownCtx)
