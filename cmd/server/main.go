@@ -125,8 +125,7 @@ func run() int {
 	}()
 	jobsHandler := jobs.NewHTTPHandler(jobQueue, jobWorkers)
 
-	srv := server.New(cfg, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
-	srv.SetLogger(logger)
+	srv := server.NewWithLogger(cfg, logger, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
 	server.RegisterJobRoutes(srv, authMiddleware, jobsHandler)
 	server.RegisterMachineRoutes(srv, authMiddleware, machineHandler)
 

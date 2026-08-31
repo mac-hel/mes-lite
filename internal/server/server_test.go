@@ -17,6 +17,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
+	platformlogging "github.com/mac-hel/mes-lite/internal/platform/logging"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -126,6 +127,42 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if body.Status != "ok" {
 		t.Errorf("expected status 'ok', got %q", body.Status)
+	}
+}
+
+func TestRequestLoggingAddsCorrelationID(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	var logs bytes.Buffer
+	logger, err := platformlogging.New(&logs, "info", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewWithLogger(config.Config{}, logger, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("X-Request-ID", "server-request-1")
+	w := httptest.NewRecorder()
+
+	s.Mux.ServeHTTP(w, req)
+
+	if w.Header().Get("X-Request-ID") != "server-request-1" {
+		t.Fatalf("expected response request ID header, got %q", w.Header().Get("X-Request-ID"))
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record["msg"] != "http request" {
+		t.Fatalf("expected http request log, got %#v", record["msg"])
+	}
+	if record["request_id"] != "server-request-1" {
+		t.Fatalf("expected request_id server-request-1, got %#v", record["request_id"])
+	}
+	if record["path"] != "/health" {
+		t.Fatalf("expected path /health, got %#v", record["path"])
+	}
+	if record["status"] != float64(http.StatusOK) {
+		t.Fatalf("expected status 200, got %#v", record["status"])
 	}
 }
 

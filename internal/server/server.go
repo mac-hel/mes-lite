@@ -21,6 +21,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/orders"
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
+	"github.com/mac-hel/mes-lite/internal/platform/logging"
 	"github.com/mac-hel/mes-lite/internal/platform/version"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
@@ -36,6 +37,15 @@ type Server struct {
 
 // New creates a new Server with the given configuration and registers routes.
 func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler, reportingHandler *reporting.Handler, csvImportHandlers ...*csvimport.Handler) *Server {
+	return NewWithLogger(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandlers...)
+}
+
+// NewWithLogger creates a Server that logs lifecycle and request records through logger.
+func NewWithLogger(cfg config.Config, logger *slog.Logger, authHandler *auth.Handler, authMiddleware *auth.Middleware, empHandler *employees.Handler, prodHandler *products.Handler, productionHandler *production.Handler, ordersHandler *orders.Handler, reportingHandler *reporting.Handler, csvImportHandlers ...*csvimport.Handler) *Server {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	s := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 		fuego.WithSecurity(openapi3.SecuritySchemes{
@@ -48,6 +58,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 			},
 		}),
 	)
+	fuego.Use(s, logging.RequestLogger(logger))
 	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
 	adminOnly := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin)))
 	readMasterData := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
@@ -101,15 +112,7 @@ func New(cfg config.Config, authHandler *auth.Handler, authMiddleware *auth.Midd
 		}
 	}
 
-	return &Server{Server: s, cfg: cfg, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-}
-
-// SetLogger configures the logger used for server lifecycle messages.
-func (s *Server) SetLogger(logger *slog.Logger) {
-	if logger == nil {
-		return
-	}
-	s.logger = logger
+	return &Server{Server: s, cfg: cfg, logger: logger}
 }
 
 // RegisterJobRoutes registers operational background-job routes.

@@ -21,6 +21,7 @@ var ttl time.Duration = 15 * time.Minute        // NOT `= 900` because no info a
 var now time.Time = time.Now().UTC()
 now.Add(ttl)
 myt.Equal(now)
+time.Since(myt).Milliseconds()
 
 ttl.IsZero()
 ```
