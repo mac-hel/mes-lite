@@ -166,6 +166,32 @@ func TestRequestLoggingAddsCorrelationID(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpoint(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(healthW, healthReq)
+	if healthW.Code != http.StatusOK {
+		t.Fatalf("expected health status 200, got %d", healthW.Code)
+	}
+
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsW := httptest.NewRecorder()
+	s.Mux.ServeHTTP(metricsW, metricsReq)
+	if metricsW.Code != http.StatusOK {
+		t.Fatalf("expected metrics status 200, got %d", metricsW.Code)
+	}
+	out := metricsW.Body.String()
+	if !strings.Contains(out, `mes_lite_http_requests_total{method="GET",status="200"} 1`) {
+		t.Fatalf("expected health request metric, got:\n%s", out)
+	}
+	if strings.Contains(out, `method="GET",status="200"} 2`) {
+		t.Fatalf("expected metrics scrape not to count itself, got:\n%s", out)
+	}
+}
+
 func TestVersionEndpoint(t *testing.T) {
 	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
 	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
