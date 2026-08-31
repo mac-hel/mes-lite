@@ -7,28 +7,21 @@ import (
 )
 
 // NewInMemoryStore creates an in-memory machine event store.
-func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{}
+func NewInMemoryStore() Store {
+	return &inMemoryStore{byExternalID: make(map[string]Event)}
 }
 
-// InMemoryStore stores machine events in process memory.
-type InMemoryStore struct {
-	initOnce     sync.Once
+type inMemoryStore struct {
 	mu           sync.RWMutex
 	events       []Event
 	byExternalID map[string]Event
 }
 
-func (s *InMemoryStore) init() {
-	s.byExternalID = make(map[string]Event)
-}
-
 // Save stores one machine event.
-func (s *InMemoryStore) Save(_ context.Context, event Event) error {
+func (s *inMemoryStore) Save(_ context.Context, event Event) error {
 	if err := event.Validate(); err != nil {
 		return err
 	}
-	s.initOnce.Do(s.init)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -44,9 +37,7 @@ func (s *InMemoryStore) Save(_ context.Context, event Event) error {
 }
 
 // FindByExternalEventID looks up a machine event by machine and external event IDs.
-func (s *InMemoryStore) FindByExternalEventID(_ context.Context, machineID, externalEventID string) (Event, error) {
-	s.initOnce.Do(s.init)
-
+func (s *inMemoryStore) FindByExternalEventID(_ context.Context, machineID, externalEventID string) (Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -58,7 +49,7 @@ func (s *InMemoryStore) FindByExternalEventID(_ context.Context, machineID, exte
 }
 
 // List returns a snapshot of received machine events.
-func (s *InMemoryStore) List(_ context.Context) ([]Event, error) {
+func (s *inMemoryStore) List(_ context.Context) ([]Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

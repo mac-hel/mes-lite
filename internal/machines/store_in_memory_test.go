@@ -79,8 +79,8 @@ func TestInMemoryStoreFindByExternalEventID(t *testing.T) {
 	}
 }
 
-func TestInMemoryStoreZeroValueSupportsConcurrentSaves(t *testing.T) {
-	var store InMemoryStore
+func TestInMemoryStoreSupportsConcurrentSaves(t *testing.T) {
+	store := NewInMemoryStore()
 	const count = 100
 	var wg sync.WaitGroup
 	errs := make(chan error, count)

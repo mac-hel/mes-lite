@@ -85,6 +85,23 @@ Analyze what settings from code should be read from env on start
 ## move all "Lesson Scope" and "Lesson Completion Notes" out of ROADMAP
 to lessons dir
 
+## Feature Flag
+
+I prepared proposal of application configuration in file `docs/config-synthesis.md`.
+First analyze and asses it.
+Provide **concise summary of your assesment**.
+
+Agree to your recommendations. Now review proposal again in context of your assesment.
+Provide a **short summary of your findings** and identify **all questions I need to answer** to close the remaining:
+* information gaps,
+* ambiguities,
+* inconsistencies,
+* contradictions,
+* unclear decisions,
+* and assumptions that would otherwise need to be made.
+
+opencode -s ses_fa7ce8e2dffex2B3VRTrLQXyg2
+
 
 
 

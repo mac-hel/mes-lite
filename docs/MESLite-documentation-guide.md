@@ -27,10 +27,15 @@ This document defines the documentation set for MESLite and how an AI developmen
     │   ├── software-architecture.md
     │   ├── offline-sync.md
     │   └── security.md
-    ├── 04-development/
+    ├── 04-engineering/
+    │   ├── package-layout.md
+    │   ├── sqlc-boundaries.md
+    │   └── validation.md
+    ├── 05-development/
+    │   ├── background-jobs.md
     │   ├── development-guide.md
     │   └── testing-strategy.md
-    ├── 05-operations/
+    ├── 06-operations/
     │   └── operations.md
     └── adr/
         └── NNNN-*.md
@@ -191,7 +196,50 @@ Contains:
 
 ---
 
-### `docs/04-development/development-guide.md`
+### `docs/04-engineering/package-layout.md`
+
+**Purpose:** Define where Go packages belong and which dependency rules are enforced.
+
+Contains:
+- `cmd/`, `internal/`, business-slice, platform, and server responsibilities;
+- dependency rules enforced by `depguard`;
+- guidance for deciding where a new package belongs;
+- known package-boundary gaps.
+
+**Use:** Read before creating, moving, or importing packages.
+
+---
+
+### `docs/04-engineering/sqlc-boundaries.md`
+
+**Purpose:** Define how MESLite uses sqlc without breaking vertical-slice boundaries.
+
+Contains:
+- query ownership rules;
+- generated-package usage rules;
+- allowed reporting exceptions;
+- rules against exposing sqlc-generated types from handlers or domain APIs;
+- mapping expectations between generated rows and slice-owned types.
+
+**Use:** Read before adding SQL queries, generated database packages, repositories, reporting queries, or persistence-facing DTOs.
+
+---
+
+### `docs/04-engineering/validation.md`
+
+**Purpose:** Define validation responsibility from HTTP request to PostgreSQL.
+
+Contains:
+- validation responsibilities for handlers, services, domain types, repositories, and database constraints;
+- PostgreSQL integrity patterns;
+- error translation expectations;
+- guidance for placing new validation rules.
+
+**Use:** Read before adding or changing validation, domain constructors, repository persistence, database constraints, or API error behavior.
+
+---
+
+### `docs/05-development/development-guide.md`
 
 **Merged from:** `coding-guidelines.md`, `development-workflow.md`, `definition-of-done.md`.
 
@@ -211,7 +259,7 @@ Contains:
 
 ---
 
-### `docs/04-development/testing-strategy.md`
+### `docs/05-development/testing-strategy.md`
 
 **Purpose:** Define how MESLite is verified.
 
@@ -227,7 +275,22 @@ Contains:
 
 ---
 
-### `docs/05-operations/operations.md`
+### `docs/05-development/background-jobs.md`
+
+**Purpose:** Explain how to use the in-memory job queue and worker pool.
+
+Contains:
+- enqueueing jobs;
+- starting and stopping worker pools;
+- handler progress reporting;
+- cancellation behavior;
+- cleanup and graceful shutdown expectations.
+
+**Use:** Read before changing background job models, queue behavior, worker pools, job handlers, progress reporting, cancellation, or shutdown handling.
+
+---
+
+### `docs/06-operations/operations.md`
 
 **Merged from:** `deployment.md`, `observability.md`, `backup-recovery.md`.
 
@@ -293,7 +356,10 @@ software-architecture.md
 offline-sync.md / security.md
     CROSS-CUTTING ARCHITECTURAL CONSTRAINTS
         ↓
-development-guide.md
+package-layout.md / sqlc-boundaries.md / validation.md
+    ENGINEERING BOUNDARIES + IMPLEMENTATION RULES
+        ↓
+development-guide.md / background-jobs.md
     HOW CHANGES ARE IMPLEMENTED
         ↓
 testing-strategy.md
@@ -314,19 +380,23 @@ For every task:
 2. Identify the affected requirements and domain concepts.
 3. Read only the architecture documents relevant to the change.
 4. Check relevant ADRs before altering established design.
-5. Implement according to `development-guide.md`.
-6. Add tests according to `testing-strategy.md`.
-7. Update affected documentation when behavior or architecture changes.
-8. Validate against the definition of done before completing the task.
+5. Read relevant engineering documents for package, persistence, or validation boundaries.
+6. Implement according to `development-guide.md` and relevant development notes.
+7. Add tests according to `testing-strategy.md`.
+8. Update affected documentation when behavior or architecture changes.
+9. Validate against the definition of done before completing the task.
 
 ### Minimum reading by task type
 
 | Change | Required documents |
 |---|---|
 | Product/UX behavior | `product-context.md`, `requirements.md`, relevant `domain.md` sections |
-| Business logic | `requirements.md`, `domain.md`, `software-architecture.md` |
-| API | `requirements.md`, `domain.md`, `software-architecture.md`, `security.md` when relevant |
-| Database/schema | `domain.md`, `software-architecture.md`, relevant ADRs |
+| Business logic | `requirements.md`, `domain.md`, `software-architecture.md`, `validation.md` when relevant |
+| API | `requirements.md`, `domain.md`, `software-architecture.md`, `validation.md`, `security.md` when relevant |
+| Database/schema | `domain.md`, `software-architecture.md`, `sqlc-boundaries.md`, `validation.md`, relevant ADRs |
+| Package/dependency boundaries | `software-architecture.md`, `package-layout.md`, relevant ADRs |
+| sqlc/repository changes | `software-architecture.md`, `sqlc-boundaries.md`, `validation.md` when relevant |
+| Background jobs | `package-layout.md`, `background-jobs.md`, relevant ADRs |
 | Core/Edge/Terminal boundaries | `system-architecture.md`, `software-architecture.md`, relevant ADRs |
 | Offline/sync/production persistence | `requirements.md`, `domain.md`, `system-architecture.md`, `offline-sync.md` |
 | Authentication/permissions | `requirements.md`, `security.md`, `software-architecture.md` |
