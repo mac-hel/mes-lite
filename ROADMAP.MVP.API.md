@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.52
+**Version:** 2.53
 **Status:** IN PROGRESS
-**Current milestone:** 13 - Observability
-**Current lesson:** L13.5 - Health, Readiness & Observability Review
+**Current milestone:** 14 - Performance Engineering
+**Current lesson:** L14.1 - Benchmarking Foundations
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -41,11 +41,12 @@ This section must always reflect the current progress.
 - Milestone 10
 - Milestone 11
 - Milestone 12
-**Next milestone:** 14 - Performance Engineering
+- Milestone 13
+**Next milestone:** 15 - Production Readiness
 **Current branch:** main
-**Architecture maturity:** 8.8 / 10
-**Go knowledge progress:** 79%
-**Interview readiness:** 75%
+**Architecture maturity:** 9.0 / 10
+**Go knowledge progress:** 82%
+**Interview readiness:** 78%
 **Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it. Background jobs are in-memory only, so queued, running and completed job history is lost on restart; ADR 0004 records the durable-queue trigger. Async CSV import jobs use temporary upload files, so process crashes can leave orphaned temp files and lose queued imports until durable job storage exists. Background job status and cancellation APIs exist for individual jobs, but there is no job list endpoint yet. Machine events are currently accepted through a fake JWT-protected API and stored in memory only; deduplication and intake counters are in-memory only, events are not durable, events are not processed into production entries and machines are not authenticated with real machine credentials yet. HTTP tracing exists with no-op/stdout exporters only; OTLP collector export is not wired yet. The generated sqlc boundary is documented but not enforced: `internal/csvimport` imports `internal/production/productiondb` directly, and nested `internal/` directories would make that a compile error once CSV import stops reusing another slice's generated insert. The depguard platform rule uses a deny list naming each business slice, so adding a slice requires updating `.golangci.yml`.
 
 The AI must update this section at the end of every lesson and milestone.
@@ -125,7 +126,7 @@ The AI should update it after every completed milestone.
 - [x] Aggregates
 - [x] CQRS
 - [ ] Event-driven Architecture
-- [ ] Observability
+- [x] Observability
 - [ ] Production Readiness
 
 **Persistence**
@@ -7701,7 +7702,7 @@ Prepare the system for future CNC and production machine integration after the E
 
 Status
 
-🔄 In Progress
+✅ Completed
 
 ### Lessons
 
@@ -7709,7 +7710,7 @@ Status
 - **L13.2** — Request Logging & Correlation IDs ✅
 - **L13.3** — Prometheus Metrics ✅
 - **L13.4** — OpenTelemetry Tracing ✅
-- **L13.5** — Health, Readiness & Observability Review
+- **L13.5** — Health, Readiness & Observability Review ✅
 
 ### Lesson 13.1 Scope
 
@@ -8126,6 +8127,139 @@ An experienced Go engineer would approve the foundation because tracing context 
 - Current lesson moved to Lesson 13.5.
 - Known technical debt updated for missing OTLP exporter wiring.
 
+### Lesson 13.5 Scope
+
+Review health, readiness and the complete observability stack before closing Milestone 13.
+
+#### Business Context
+
+Operators need two different operational signals: whether the process is alive and whether it is ready to serve real business traffic. They also need confidence that logs, metrics and traces compose without leaking into business packages.
+
+#### Problem
+
+`/health` existed as a liveness endpoint, but `/ready` always returned success. That meant an orchestrator could send traffic to an application whose database dependency was unavailable.
+
+#### Design Discussion
+
+Liveness stays cheap and dependency-free: `/health` answers only whether the process can respond. Readiness now has an explicit check hook. The production composition root wires that hook to `pgxpool.Ping`, while tests can install a small fake function.
+
+A readiness failure returns `503 Service Unavailable`, not `500 Internal Server Error`. The process is still alive; it is just not ready to receive traffic.
+
+#### Go Concepts
+
+- function fields for small dependency hooks
+- `context.WithTimeout` for bounded readiness checks
+- correct HTTP status semantics for operational endpoints
+- focused tests for success and dependency failure
+
+#### Architecture Concepts
+
+- liveness separated from readiness
+- composition root wires infrastructure health checks
+- observability remains in platform packages
+- milestone review before performance work begins
+
+### Lesson 13.5 Completion Notes
+
+#### Business Context
+
+MES Lite now has a meaningful readiness endpoint in addition to the existing liveness endpoint.
+
+#### Problem
+
+The readiness endpoint returned success unconditionally. That was misleading because the server could be alive while PostgreSQL was unreachable.
+
+#### Design Discussion
+
+Added a readiness-check hook to `server.Server`. The server package does not import PostgreSQL or know which dependencies matter; it only calls the injected function with a bounded context. `cmd/server` wires the hook to `db.Ping`.
+
+This keeps dependency knowledge in the composition root and preserves the server package as HTTP composition rather than database infrastructure.
+
+#### Implementation
+
+- Added `Server.SetReadinessCheck`.
+- Changed `/ready` to return `{"status":"ready"}` when the check succeeds.
+- Added a two-second timeout around readiness checks.
+- Changed readiness dependency failures to return `503 Service Unavailable`.
+- Logged readiness failures as structured warnings.
+- Wired runtime readiness to `pgxpool.Pool.Ping` in `cmd/server`.
+
+#### Tests
+
+- Added server test proving `/ready` calls the readiness check and returns `200 OK` with `status=ready`.
+- Added server test proving readiness-check failure returns `503 Service Unavailable`.
+- Verified with `go test ./internal/server -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+`NewWithLogger` now constructs `*Server` before route registration so the `/ready` route can call a method that uses server state. The public route behavior is otherwise unchanged.
+
+#### Code Review
+
+An experienced Go engineer would approve the liveness/readiness split. The readiness endpoint checks the database without making `internal/server` depend on pgx, and failures use the correct operational status code.
+
+The main observability limitation remains OTLP exporter wiring. The application can create request spans and emit stdout traces for learning, but production collector export is still future work.
+
+#### Exercises
+
+- Add a readiness check that verifies the background worker pool has started.
+- Add a test proving readiness failures are logged with `request_id` and `trace_id` when tracing is active.
+- Decide whether `/health`, `/ready` and `/metrics` should be protected by network policy in deployment.
+
+#### Interview Questions
+
+- What is the difference between liveness and readiness?
+- Why should readiness checks have timeouts?
+- Why is `503 Service Unavailable` better than `500` for dependency-readiness failure?
+- Why should observability middleware live outside business slices?
+
+#### Roadmap Update
+
+- Lesson 13.5 completed.
+- Milestone 13 completed.
+- Current milestone moved to Milestone 14.
+- Current lesson moved to Lesson 14.1.
+- Architecture `Observability` marked complete in the Knowledge Matrix.
+
+### Milestone 13 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve Milestone 13 as a coherent observability foundation. Logging, metrics and tracing live in platform packages. Business slices did not gain observability dependencies, and HTTP middleware composes through standard `net/http` shapes.
+
+The milestone intentionally keeps production export simple. Prometheus scraping is available through `/metrics`, while tracing supports no-op and stdout exporters. OTLP collector wiring remains known technical debt for a later production-readiness pass.
+
+#### Code Review
+
+The code is explicit and testable. Logger setup is centralized. Request logging propagates correlation IDs. Metrics use a local registry and low-cardinality labels. Tracing creates HTTP server spans and connects request logs to trace IDs. Readiness now checks PostgreSQL through an injected function.
+
+The main improvement for later is route-template observability. Raw path labels were intentionally avoided for metrics, but future stable route-template labels would improve dashboard usefulness without creating high-cardinality series.
+
+#### Refactoring
+
+This milestone removed duplicated logger setup, replaced a post-construction logger setter with `NewWithLogger`, added platform packages for metrics and tracing, and changed readiness from a static route to a dependency-aware method.
+
+#### Interview Review
+
+You should now be able to explain structured logs, correlation IDs, Prometheus counters and histograms, label cardinality, OpenTelemetry spans, trace context propagation, liveness versus readiness and why observability belongs at platform boundaries.
+
+#### Completion Criteria
+
+- Structured logging implemented with `log/slog`.
+- Request logging emits correlation IDs and status/latency fields.
+- Prometheus-compatible `/metrics` endpoint implemented.
+- HTTP request metrics avoid raw-path labels.
+- OpenTelemetry request tracing implemented.
+- Request logs include `trace_id` when a span is active.
+- `/health` remains a cheap liveness endpoint.
+- `/ready` checks PostgreSQL readiness and returns `503` when unavailable.
+- Tests, build, vet and lint pass.
+- Roadmap updated.
+
 ### Goal
 
 Make the application observable in production.
@@ -8195,7 +8329,66 @@ Operators can understand system health and diagnose problems quickly.
 
 Status
 
-⬜ Not Started
+🔄 In Progress
+
+### Lessons
+
+- **L14.1** — Benchmarking Foundations
+- **L14.2** — pprof CPU & Memory Profiling
+- **L14.3** — Allocation Analysis & Escape Analysis
+- **L14.4** — Runtime Scheduler & Garbage Collector Review
+- **L14.5** — Performance Review & Optimization Discipline
+
+### Lesson 14.1 Scope
+
+Introduce Go benchmarks on a real code path and establish the rule that optimization starts with measurement.
+
+#### Business Context
+
+CSV import and reporting are likely performance-sensitive paths as data grows. Before changing implementations, the project needs repeatable measurements that can show whether a change helps or hurts.
+
+#### Problem
+
+The codebase has many correctness tests but no benchmarks. Without benchmarks, performance discussions rely on guesses, and future refactors could accidentally make hot paths slower or more allocation-heavy.
+
+#### Design Discussion
+
+Start with a focused benchmark around CSV import validation or request middleware overhead. The benchmark should measure an existing behavior without changing production code first. The goal of L14.1 is learning benchmark mechanics and avoiding misleading results, not immediately optimizing.
+
+Benchmarks should use `testing.B`, report allocations with `b.ReportAllocs()` and keep setup outside the measured loop where possible.
+
+#### Go Concepts
+
+- `testing.B`
+- benchmark loops and `b.N`
+- `b.ReportAllocs()`
+- setup versus measured work
+- avoiding benchmark dead-code elimination
+
+#### Architecture Concepts
+
+- performance baselines before optimization
+- realistic input sizes for business-relevant paths
+- benchmark results as engineering evidence
+
+#### Tests
+
+- Add at least one benchmark for a meaningful existing path.
+- Run the benchmark with allocation reporting.
+- Keep all correctness tests passing.
+
+#### Exercises
+
+- Compare benchmark results for small and large CSV samples.
+- Move setup accidentally inside the benchmark loop and explain why the result changes.
+- Decide which endpoint or package should receive the next benchmark.
+
+#### Interview Questions
+
+- How does Go's benchmark runner choose `b.N`?
+- Why should setup usually be outside the measured loop?
+- What does `allocs/op` tell you?
+- Why can microbenchmarks mislead production optimization?
 
 ### Goal
 

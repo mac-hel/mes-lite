@@ -143,6 +143,7 @@ func run() int {
 	jobsHandler := jobs.NewHTTPHandler(jobQueue, jobWorkers)
 
 	srv := server.NewWithLogger(cfg, logger, authHandler, authMiddleware, empHandler, prodHandler, productionHandler, ordersHandler, reportingHandler, csvImportHandler)
+	srv.SetReadinessCheck(db.Ping)
 	server.RegisterJobRoutes(srv, authMiddleware, jobsHandler)
 	server.RegisterMachineRoutes(srv, authMiddleware, machineHandler)
 

@@ -33,8 +33,9 @@ import (
 // Server wraps the Fuego HTTP server with application-specific configuration.
 type Server struct {
 	*fuego.Server
-	cfg    config.Config
-	logger *slog.Logger
+	cfg            config.Config
+	logger         *slog.Logger
+	readinessCheck func(context.Context) error
 }
 
 // New creates a new Server with the given configuration and registers routes.
@@ -49,7 +50,7 @@ func NewWithLogger(cfg config.Config, logger *slog.Logger, authHandler *auth.Han
 	}
 	httpMetrics := metrics.NewHTTPMetrics()
 
-	s := fuego.NewServer(
+	fuegoServer := fuego.NewServer(
 		fuego.WithAddr(cfg.Addr()),
 		fuego.WithSecurity(openapi3.SecuritySchemes{
 			"bearerAuth": &openapi3.SecuritySchemeRef{
@@ -61,10 +62,11 @@ func NewWithLogger(cfg config.Config, logger *slog.Logger, authHandler *auth.Han
 			},
 		}),
 	)
-	fuego.GetStd(s, "/metrics", httpMetrics.Handler().ServeHTTP, fuego.OptionHide())
-	fuego.Use(s, httpMetrics.Middleware)
-	fuego.Use(s, tracing.Middleware(nil))
-	fuego.Use(s, logging.RequestLogger(logger))
+	s := &Server{Server: fuegoServer, cfg: cfg, logger: logger}
+	fuego.GetStd(s.Server, "/metrics", httpMetrics.Handler().ServeHTTP, fuego.OptionHide())
+	fuego.Use(s.Server, httpMetrics.Middleware)
+	fuego.Use(s.Server, tracing.Middleware(nil))
+	fuego.Use(s.Server, logging.RequestLogger(logger))
 	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
 	adminOnly := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin)))
 	readMasterData := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
@@ -76,49 +78,54 @@ func NewWithLogger(cfg config.Config, logger *slog.Logger, authHandler *auth.Han
 	importProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager)))
 	reviewProduction := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin, auth.RoleManager, auth.RoleLeader)))
 
-	fuego.Get(s, "/ready", readyHandler)
-	fuego.Get(s, "/health", healthHandler)
-	fuego.Get(s, "/version", versionHandler)
-	fuego.Post(s, "/auth/login", authHandler.Login)
+	fuego.Get(s.Server, "/ready", s.readyHandler)
+	fuego.Get(s.Server, "/health", healthHandler)
+	fuego.Get(s.Server, "/version", versionHandler)
+	fuego.Post(s.Server, "/auth/login", authHandler.Login)
 
-	fuego.Post(s, "/employees", empHandler.Create, adminOnly)
-	fuego.Get(s, "/employees", empHandler.List, readMasterData)
-	fuego.Put(s, "/employees/{id}", empHandler.Update, adminOnly)
-	fuego.Put(s, "/employees/{id}/deactivate", empHandler.Deactivate, adminOnly)
+	fuego.Post(s.Server, "/employees", empHandler.Create, adminOnly)
+	fuego.Get(s.Server, "/employees", empHandler.List, readMasterData)
+	fuego.Put(s.Server, "/employees/{id}", empHandler.Update, adminOnly)
+	fuego.Put(s.Server, "/employees/{id}/deactivate", empHandler.Deactivate, adminOnly)
 
-	fuego.Post(s, "/products", prodHandler.Create, manageProducts)
-	fuego.Get(s, "/products", prodHandler.List, readMasterData)
-	fuego.Get(s, "/products/search", prodHandler.Search, readMasterData)
-	fuego.Put(s, "/products/{sku}", prodHandler.Update, manageProducts)
-	fuego.Put(s, "/products/{sku}/deactivate", prodHandler.Deactivate, manageProducts)
+	fuego.Post(s.Server, "/products", prodHandler.Create, manageProducts)
+	fuego.Get(s.Server, "/products", prodHandler.List, readMasterData)
+	fuego.Get(s.Server, "/products/search", prodHandler.Search, readMasterData)
+	fuego.Put(s.Server, "/products/{sku}", prodHandler.Update, manageProducts)
+	fuego.Put(s.Server, "/products/{sku}/deactivate", prodHandler.Deactivate, manageProducts)
 
-	fuego.Post(s, "/production-entries", productionHandler.Register, registerProduction)
-	fuego.Get(s, "/production-entries", productionHandler.List, reviewProduction)
-	fuego.Post(s, "/production-entries/{id}/corrections", productionHandler.Correct, reviewProduction)
-	fuego.Get(s, "/production-entries/{id}/corrections", productionHandler.ListCorrections, reviewProduction)
+	fuego.Post(s.Server, "/production-entries", productionHandler.Register, registerProduction)
+	fuego.Get(s.Server, "/production-entries", productionHandler.List, reviewProduction)
+	fuego.Post(s.Server, "/production-entries/{id}/corrections", productionHandler.Correct, reviewProduction)
+	fuego.Get(s.Server, "/production-entries/{id}/corrections", productionHandler.ListCorrections, reviewProduction)
 
-	fuego.Post(s, "/production-orders", ordersHandler.Create, manageOrders)
-	fuego.Get(s, "/production-orders/{id}", ordersHandler.Get, readMasterData)
-	fuego.Post(s, "/production-orders/{id}/assignments", ordersHandler.AssignEmployee, manageOrders)
-	fuego.Put(s, "/production-orders/{id}/release", ordersHandler.Release, progressOrders)
-	fuego.Put(s, "/production-orders/{id}/start", ordersHandler.Start, progressOrders)
-	fuego.Put(s, "/production-orders/{id}/complete", ordersHandler.Complete, progressOrders)
-	fuego.Put(s, "/production-orders/{id}/cancel", ordersHandler.Cancel, progressOrders)
+	fuego.Post(s.Server, "/production-orders", ordersHandler.Create, manageOrders)
+	fuego.Get(s.Server, "/production-orders/{id}", ordersHandler.Get, readMasterData)
+	fuego.Post(s.Server, "/production-orders/{id}/assignments", ordersHandler.AssignEmployee, manageOrders)
+	fuego.Put(s.Server, "/production-orders/{id}/release", ordersHandler.Release, progressOrders)
+	fuego.Put(s.Server, "/production-orders/{id}/start", ordersHandler.Start, progressOrders)
+	fuego.Put(s.Server, "/production-orders/{id}/complete", ordersHandler.Complete, progressOrders)
+	fuego.Put(s.Server, "/production-orders/{id}/cancel", ordersHandler.Cancel, progressOrders)
 
-	fuego.Get(s, "/reports/daily-production", reportingHandler.DailyProduction, readReports)
-	fuego.Get(s, "/reports/daily-employee-production", reportingHandler.DailyEmployeeProduction, readReports)
-	fuego.Get(s, "/reports/employee-productivity", reportingHandler.EmployeeProductivity, readReports)
-	fuego.Get(s, "/reports/employee-productivity/products", reportingHandler.EmployeeProductivityProducts, readReports)
-	fuego.Get(s, "/reports/product-statistics", reportingHandler.ProductStatistics, readReports)
+	fuego.Get(s.Server, "/reports/daily-production", reportingHandler.DailyProduction, readReports)
+	fuego.Get(s.Server, "/reports/daily-employee-production", reportingHandler.DailyEmployeeProduction, readReports)
+	fuego.Get(s.Server, "/reports/employee-productivity", reportingHandler.EmployeeProductivity, readReports)
+	fuego.Get(s.Server, "/reports/employee-productivity/products", reportingHandler.EmployeeProductivityProducts, readReports)
+	fuego.Get(s.Server, "/reports/product-statistics", reportingHandler.ProductStatistics, readReports)
 
 	if len(csvImportHandlers) > 0 && csvImportHandlers[0] != nil {
-		fuego.Post(s, "/imports/production-entries", csvImportHandlers[0].ImportProductionEntries, importProduction)
+		fuego.Post(s.Server, "/imports/production-entries", csvImportHandlers[0].ImportProductionEntries, importProduction)
 		if csvImportHandlers[0].AsyncEnabled() {
-			fuego.Post(s, "/imports/production-entries/jobs", csvImportHandlers[0].ImportProductionEntriesAsync, importProduction)
+			fuego.Post(s.Server, "/imports/production-entries/jobs", csvImportHandlers[0].ImportProductionEntriesAsync, importProduction)
 		}
 	}
 
-	return &Server{Server: s, cfg: cfg, logger: logger}
+	return s
+}
+
+// SetReadinessCheck installs the dependency check used by /ready.
+func (s *Server) SetReadinessCheck(check func(context.Context) error) {
+	s.readinessCheck = check
 }
 
 // RegisterJobRoutes registers operational background-job routes.
@@ -147,10 +154,21 @@ func RegisterMachineRoutes(s *Server, authMiddleware *auth.Middleware, machineHa
 	fuego.Post(s.Server, "/machines/{machineId}/events", machineHandler.CreateEvent, manageMachines)
 }
 
-type readyResponse struct{}
+type readyResponse struct {
+	Status string `json:"status"`
+}
 
-func readyHandler(c fuego.ContextNoBody) (readyResponse, error) {
-	return readyResponse{}, nil
+func (s *Server) readyHandler(c fuego.ContextNoBody) (readyResponse, error) {
+	if s.readinessCheck == nil {
+		return readyResponse{Status: "ready"}, nil
+	}
+	ctx, cancel := context.WithTimeout(c.Context(), 2*time.Second)
+	defer cancel()
+	if err := s.readinessCheck(ctx); err != nil {
+		s.logger.WarnContext(c.Context(), "readiness check failed", "err", err)
+		return readyResponse{}, fuego.HTTPError{Err: err, Status: http.StatusServiceUnavailable, Detail: "service is not ready"}
+	}
+	return readyResponse{Status: "ready"}, nil
 }
 
 type healthResponse struct {

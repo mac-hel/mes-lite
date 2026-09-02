@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,6 +128,55 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if body.Status != "ok" {
 		t.Errorf("expected status 'ok', got %q", body.Status)
+	}
+}
+
+func TestReadinessEndpointReady(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	var called bool
+	s.SetReadinessCheck(func(ctx context.Context) error {
+		called = true
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if !called {
+		t.Fatal("expected readiness check to be called")
+	}
+
+	var body readyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if body.Status != "ready" {
+		t.Fatalf("expected status ready, got %q", body.Status)
+	}
+}
+
+func TestReadinessEndpointNotReady(t *testing.T) {
+	authH, authM, _, empH, prodH, productionH, ordersH, reportingH := testHandlers(t)
+	s := New(config.Config{}, authH, authM, empH, prodH, productionH, ordersH, reportingH)
+	s.SetReadinessCheck(func(ctx context.Context) error {
+		return errors.New("database unavailable")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+	s.Mux.ServeHTTP(w, req)
+
+	resp := w.Result()
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", resp.StatusCode)
 	}
 }
 
