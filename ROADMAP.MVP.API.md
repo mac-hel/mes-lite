@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.51
+**Version:** 2.52
 **Status:** IN PROGRESS
 **Current milestone:** 13 - Observability
-**Current lesson:** L13.4 - OpenTelemetry Tracing
+**Current lesson:** L13.5 - Health, Readiness & Observability Review
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -46,7 +46,7 @@ This section must always reflect the current progress.
 **Architecture maturity:** 8.8 / 10
 **Go knowledge progress:** 79%
 **Interview readiness:** 75%
-**Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it. Background jobs are in-memory only, so queued, running and completed job history is lost on restart; ADR 0004 records the durable-queue trigger. Async CSV import jobs use temporary upload files, so process crashes can leave orphaned temp files and lose queued imports until durable job storage exists. Background job status and cancellation APIs exist for individual jobs, but there is no job list endpoint yet. Machine events are currently accepted through a fake JWT-protected API and stored in memory only; deduplication and intake counters are in-memory only, events are not durable, events are not processed into production entries and machines are not authenticated with real machine credentials yet. The generated sqlc boundary is documented but not enforced: `internal/csvimport` imports `internal/production/productiondb` directly, and nested `internal/` directories would make that a compile error once CSV import stops reusing another slice's generated insert. The depguard platform rule uses a deny list naming each business slice, so adding a slice requires updating `.golangci.yml`.
+**Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it. Background jobs are in-memory only, so queued, running and completed job history is lost on restart; ADR 0004 records the durable-queue trigger. Async CSV import jobs use temporary upload files, so process crashes can leave orphaned temp files and lose queued imports until durable job storage exists. Background job status and cancellation APIs exist for individual jobs, but there is no job list endpoint yet. Machine events are currently accepted through a fake JWT-protected API and stored in memory only; deduplication and intake counters are in-memory only, events are not durable, events are not processed into production entries and machines are not authenticated with real machine credentials yet. HTTP tracing exists with no-op/stdout exporters only; OTLP collector export is not wired yet. The generated sqlc boundary is documented but not enforced: `internal/csvimport` imports `internal/production/productiondb` directly, and nested `internal/` directories would make that a compile error once CSV import stops reusing another slice's generated insert. The depguard platform rule uses a deny list naming each business slice, so adding a slice requires updating `.golangci.yml`.
 
 The AI must update this section at the end of every lesson and milestone.
 
@@ -7708,7 +7708,7 @@ Status
 - **L13.1** — Structured Logging Foundation ✅
 - **L13.2** — Request Logging & Correlation IDs ✅
 - **L13.3** — Prometheus Metrics ✅
-- **L13.4** — OpenTelemetry Tracing
+- **L13.4** — OpenTelemetry Tracing ✅
 - **L13.5** — Health, Readiness & Observability Review
 
 ### Lesson 13.1 Scope
@@ -8019,6 +8019,112 @@ The main follow-up is tracing. Metrics can show that latency increased; traces w
 
 - Lesson 13.3 completed.
 - Current lesson moved to Lesson 13.4.
+
+### Lesson 13.4 Scope
+
+Add OpenTelemetry HTTP tracing so each request creates a server span and request logs can include a trace ID when tracing is active.
+
+#### Business Context
+
+Metrics can show that requests are slow or failing, but operators need traces to understand where a request spent time as the service grows. A trace ID also gives support and developers a common handle that can connect logs, client reports and distributed traces.
+
+#### Problem
+
+The application had structured logs, correlation IDs and Prometheus metrics, but no tracing foundation. Request logs could identify one request, but there was no OpenTelemetry span context that future database, job or integration spans could attach to.
+
+#### Design Discussion
+
+Tracing is added as platform middleware. Each HTTP request starts a server span with method, path, status and duration attributes. The middleware extracts W3C `traceparent` headers so upstream trace context can flow into MES Lite.
+
+The provider supports `OTEL_TRACES_EXPORTER=none` by default and `OTEL_TRACES_EXPORTER=stdout` for local inspection. OTLP export is intentionally postponed. Adding a collector endpoint and deployment configuration is a production-integration concern, while this lesson focuses on request span creation and context propagation.
+
+The middleware order is metrics, tracing, then request logging. This means request logs are emitted while the span context is still active, so logs can include `trace_id`.
+
+#### Go Concepts
+
+- OpenTelemetry tracer providers and spans
+- context propagation through HTTP middleware
+- W3C trace context extraction
+- span attributes and status
+- graceful tracer-provider shutdown
+
+#### Architecture Concepts
+
+- tracing as platform infrastructure
+- request spans as the root for future child spans
+- trace IDs connected to structured logs
+- exporter choice kept in configuration
+
+### Lesson 13.4 Completion Notes
+
+#### Business Context
+
+MES Lite now creates OpenTelemetry server spans for HTTP requests and can connect request logs to traces through `trace_id`.
+
+#### Problem
+
+Logs and metrics were useful but incomplete. There was no trace context for following one request through future internal operations.
+
+#### Design Discussion
+
+Added `internal/platform/tracing` with a configurable tracer provider and HTTP middleware. The middleware starts one server span per request and records low-risk request attributes. It avoids business-specific spans for now because database, job and integration tracing should be added where those boundaries are reviewed.
+
+`cmd/server` configures the provider during startup and shuts it down with a timeout on exit. The default exporter is `none`, so local development does not emit trace payloads unexpectedly. `stdout` is available for learning and manual inspection.
+
+Request logging now checks the active span context and includes `trace_id` when one exists.
+
+#### Implementation
+
+- Added `internal/platform/tracing`.
+- Added `tracing.Config` and `NewProvider`.
+- Added `OTEL_TRACES_EXPORTER` configuration with default `none`.
+- Added `stdout` trace exporter support for local inspection.
+- Installed W3C trace-context propagation.
+- Added tracing HTTP middleware.
+- Added span attributes for method, path, status and duration.
+- Added trace IDs to request logs when an active span exists.
+- Wired tracing startup and shutdown in `cmd/server`.
+
+#### Tests
+
+- Added invalid exporter configuration test.
+- Added tracing middleware test using OpenTelemetry's span recorder.
+- Added assertions for span name, method, path and response status attributes.
+- Added test for missing trace ID when no span exists.
+- Added request-log test proving `trace_id` is included when span context is active.
+- Updated configuration tests for `OTEL_TRACES_EXPORTER`.
+- Verified with `go test ./internal/platform/tracing ./internal/platform/logging ./internal/platform/config ./internal/server -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No business package was changed. Tracing was added as platform middleware and request logging gained only trace-context awareness.
+
+#### Code Review
+
+An experienced Go engineer would approve the foundation because tracing context is established at the HTTP boundary and exporter behavior is explicit. The main limitation is deliberate: OTLP export and child spans for database/job operations are not wired yet.
+
+#### Exercises
+
+- Send a request with an existing `traceparent` header and verify the server span joins the upstream trace.
+- Enable `OTEL_TRACES_EXPORTER=stdout` and inspect the emitted span fields.
+- Design where database query spans should be introduced without leaking sqlc details into handlers.
+
+#### Interview Questions
+
+- What does a trace show that logs and metrics do not?
+- Why is context propagation required for distributed tracing?
+- What is the difference between a trace ID and a span ID?
+- Why should tracer-provider shutdown be part of graceful shutdown?
+
+#### Roadmap Update
+
+- Lesson 13.4 completed.
+- Current lesson moved to Lesson 13.5.
+- Known technical debt updated for missing OTLP exporter wiring.
 
 ### Goal
 

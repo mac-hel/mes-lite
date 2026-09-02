@@ -85,7 +85,7 @@ Analyze what settings from code should be read from env on start
 ## move all "Lesson Scope" and "Lesson Completion Notes" out of ROADMAP
 to lessons dir
 
-## Feature Flag
+## Config/Feature Flag - by layer and scope
 
 I prepared proposal of application configuration in file `docs/config-synthesis.md`.
 First analyze and asses it.
@@ -100,7 +100,40 @@ Provide a **short summary of your findings** and identify **all questions I need
 * unclear decisions,
 * and assumptions that would otherwise need to be made.
 
-opencode -s ses_fa7ce8e2dffex2B3VRTrLQXyg2
+> opencode -s ses_fa7ce8e2dffex2B3VRTrLQXyg2
+
+I would drop persisted runtime config.
+The same effect should be achieveable by changing config file on the fly and triggering re-read at application runtime.
+
+**SCRATCH**
+```
+// Business settings
+Code: default value / required              - for all app instances (all Companies/Factories)
+Company Settings file: Company overrides    - each app instance (Company) has separate file
+    - re-read can be triggered run-time, without app restart
+Factory Settings file: Factory overrides    - each app instance can have multiple files (for multiple Factories)
+    - re-read can be triggered run-time, without app restart
+
+// Environment (Technical?) settings
+Code: default value / required              - for all app instances (all Companies/Factories)
+Env variables: Company overrides            - each app instance (Company) has separate env
+    - re-read only on restart
+```
+In the code, settings are behind facade/abstraction - this will allow to implement DB backed or UI-driven settings in the future.
+
+## Unified observability
+- info/error logs
+- panics/startup failures
+- metrics - technical and business
+- tracing
+
+* info/error types
+* how each type should be handled and where logged?
+* E.G.: worker's attempt to register production fails - should it go to metrics or logs? Should it raise immediate alarm (not only be reported to worker)????????????????
+
+By default all goes to stdout, but where should be exported for each Company/Factory?
+1 Collector per Factory?
+
 
 
 

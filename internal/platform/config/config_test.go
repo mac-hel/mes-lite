@@ -16,6 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	_ = os.Unsetenv("JWT_SECRET")
 	_ = os.Unsetenv("LOG_LEVEL")
 	_ = os.Unsetenv("LOG_FORMAT")
+	_ = os.Unsetenv("OTEL_TRACES_EXPORTER")
 
 	cfg := Load()
 
@@ -54,6 +55,10 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LogFormat != "json" {
 		t.Errorf("expected default log format json, got %s", cfg.LogFormat)
 	}
+
+	if cfg.OTELTracesExporter != "none" {
+		t.Errorf("expected default trace exporter none, got %s", cfg.OTELTracesExporter)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -66,6 +71,7 @@ func TestLoadFromEnv(t *testing.T) {
 	_ = os.Setenv("JWT_SECRET", "jwt-secret-with-at-least-32-characters")
 	_ = os.Setenv("LOG_LEVEL", "debug")
 	_ = os.Setenv("LOG_FORMAT", "text")
+	_ = os.Setenv("OTEL_TRACES_EXPORTER", "stdout")
 	defer func() {
 		_ = os.Unsetenv("HOST")
 		_ = os.Unsetenv("PORT")
@@ -76,6 +82,7 @@ func TestLoadFromEnv(t *testing.T) {
 		_ = os.Unsetenv("JWT_SECRET")
 		_ = os.Unsetenv("LOG_LEVEL")
 		_ = os.Unsetenv("LOG_FORMAT")
+		_ = os.Unsetenv("OTEL_TRACES_EXPORTER")
 	}()
 
 	cfg := Load()
@@ -114,6 +121,10 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if cfg.LogFormat != "text" {
 		t.Errorf("expected log format from env, got %s", cfg.LogFormat)
+	}
+
+	if cfg.OTELTracesExporter != "stdout" {
+		t.Errorf("expected trace exporter from env, got %s", cfg.OTELTracesExporter)
 	}
 }
 

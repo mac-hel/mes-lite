@@ -23,6 +23,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	"github.com/mac-hel/mes-lite/internal/platform/logging"
 	"github.com/mac-hel/mes-lite/internal/platform/metrics"
+	"github.com/mac-hel/mes-lite/internal/platform/tracing"
 	"github.com/mac-hel/mes-lite/internal/platform/version"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
@@ -62,6 +63,7 @@ func NewWithLogger(cfg config.Config, logger *slog.Logger, authHandler *auth.Han
 	)
 	fuego.GetStd(s, "/metrics", httpMetrics.Handler().ServeHTTP, fuego.OptionHide())
 	fuego.Use(s, httpMetrics.Middleware)
+	fuego.Use(s, tracing.Middleware(nil))
 	fuego.Use(s, logging.RequestLogger(logger))
 	requireBearer := fuego.OptionSecurity(openapi3.NewSecurityRequirement().Authenticate("bearerAuth"))
 	adminOnly := fuego.GroupOptions(requireBearer, fuego.OptionMiddleware(authMiddleware.Authenticate, authMiddleware.RequireRole(auth.RoleAdmin)))

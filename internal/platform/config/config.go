@@ -16,18 +16,20 @@ type Config struct {
 	JWTSecret             string
 	LogLevel              string
 	LogFormat             string
+	OTELTracesExporter    string
 }
 
 // Load reads configuration from environment variables, applying defaults where
 // values are not set.
 func Load() Config {
 	cfg := Config{
-		Host:          "0.0.0.0",
-		Port:          9090,
-		DatabaseURL:   "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable",
-		MigrationsDir: "migrations",
-		LogLevel:      "info",
-		LogFormat:     "json",
+		Host:               "0.0.0.0",
+		Port:               9090,
+		DatabaseURL:        "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable",
+		MigrationsDir:      "migrations",
+		LogLevel:           "info",
+		LogFormat:          "json",
+		OTELTracesExporter: "none",
 	}
 
 	if host := os.Getenv("HOST"); host != "" {
@@ -66,6 +68,10 @@ func Load() Config {
 
 	if format := os.Getenv("LOG_FORMAT"); format != "" {
 		cfg.LogFormat = format
+	}
+
+	if exporter := os.Getenv("OTEL_TRACES_EXPORTER"); exporter != "" {
+		cfg.OTELTracesExporter = exporter
 	}
 
 	return cfg

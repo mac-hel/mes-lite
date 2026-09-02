@@ -20,6 +20,8 @@ import (
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	"github.com/mac-hel/mes-lite/internal/platform/logging"
+	"github.com/mac-hel/mes-lite/internal/platform/tracing"
+	"github.com/mac-hel/mes-lite/internal/platform/version"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -33,14 +35,29 @@ func main() {
 func run() int {
 	config.LoadDotEnv(".env")
 	cfg := config.Load()
+	ctx := context.Background()
 	logger, err := logging.New(os.Stdout, cfg.LogLevel, cfg.LogFormat)
 	if err != nil {
 		slog.Error("configure logger", "err", err)
 		return 1
 	}
 	slog.SetDefault(logger)
-	ctx := context.Background()
-
+	traceProvider, err := tracing.NewProvider(ctx, tracing.Config{
+		ServiceName:    "mes-lite",
+		ServiceVersion: version.String(),
+		Exporter:       cfg.OTELTracesExporter,
+	})
+	if err != nil {
+		slog.Error("configure tracing", "err", err)
+		return 1
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+			slog.Error("shutdown tracing", "err", err)
+		}
+	}()
 	poolCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

@@ -8,6 +8,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestNewJSONLogger(t *testing.T) {
@@ -153,6 +157,31 @@ func TestRequestLoggerGeneratesRequestID(t *testing.T) {
 	log := decodeLog(t, buf.Bytes())
 	if log["request_id"] != requestID {
 		t.Fatalf("expected log request ID %q, got %#v", requestID, log["request_id"])
+	}
+}
+
+func TestRequestLoggerIncludesTraceID(t *testing.T) {
+	var buf bytes.Buffer
+	logger, err := New(&buf, "info", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	tracer := provider.Tracer("test")
+
+	handler := RequestLogger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	ctx, span := tracer.Start(req.Context(), "test", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	log := decodeLog(t, buf.Bytes())
+	if log["trace_id"] == "" {
+		t.Fatalf("expected trace_id in log, got %#v", log["trace_id"])
 	}
 }
 

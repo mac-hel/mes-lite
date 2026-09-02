@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mac-hel/mes-lite/internal/platform/ids"
+	"github.com/mac-hel/mes-lite/internal/platform/tracing"
 )
 
 const requestIDHeader = "X-Request-ID"
@@ -54,13 +55,18 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			started := time.Now()
 			next.ServeHTTP(recorder, r.WithContext(ctx))
 
-			logger.InfoContext(ctx, "http request",
+			attrs := []any{
 				"request_id", requestID,
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", recorder.status,
 				"duration_ms", time.Since(started).Milliseconds(),
-			)
+			}
+			if traceID, ok := tracing.TraceIDFromContext(ctx); ok {
+				attrs = append(attrs, "trace_id", traceID)
+			}
+
+			logger.InfoContext(ctx, "http request", attrs...)
 		})
 	}
 }
