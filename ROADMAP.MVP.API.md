@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.53
+**Version:** 2.54
 **Status:** IN PROGRESS
 **Current milestone:** 14 - Performance Engineering
-**Current lesson:** L14.1 - Benchmarking Foundations
+**Current lesson:** L14.2 - pprof CPU & Memory Profiling
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -144,7 +144,7 @@ The AI should update it after every completed milestone.
 - [x] Table Tests
 - [x] httptest
 - [ ] Testcontainers
-- [ ] Benchmarks
+- [x] Benchmarks
 - [ ] Fuzz Tests
 - [x] Race Detection
 
@@ -168,7 +168,7 @@ The AI should update it after every completed milestone.
 **Performance**
 - [ ] pprof
 - [ ] trace
-- [ ] benchmarks
+- [x] benchmarks
 - [ ] allocations
 
 ---
@@ -8333,7 +8333,7 @@ Status
 
 ### Lessons
 
-- **L14.1** — Benchmarking Foundations
+- **L14.1** — Benchmarking Foundations ✅
 - **L14.2** — pprof CPU & Memory Profiling
 - **L14.3** — Allocation Analysis & Escape Analysis
 - **L14.4** — Runtime Scheduler & Garbage Collector Review
@@ -8389,6 +8389,124 @@ Benchmarks should use `testing.B`, report allocations with `b.ReportAllocs()` an
 - Why should setup usually be outside the measured loop?
 - What does `allocs/op` tell you?
 - Why can microbenchmarks mislead production optimization?
+
+### Lesson 14.1 Completion Notes
+
+#### Business Context
+
+MES Lite now has its first repeatable performance baseline for a business-relevant path: CSV import validation.
+
+#### Problem
+
+The project had correctness tests for CSV import, but no benchmarks. That meant performance discussion around import behavior was based on assumptions rather than measurements.
+
+#### Design Discussion
+
+The first benchmark measures existing CSV validation behavior without changing production code. It uses generated CSV inputs with 100, 1,000 and 10,000 rows so small and larger import sizes can be compared.
+
+CSV generation stays outside the measured loop. Each iteration creates a new reader because readers are consumed by validation. The benchmark stores the result in a package-level variable so the compiler cannot remove the measured work as unused.
+
+#### Implementation
+
+- Added `BenchmarkValidateProductionEntries` in `internal/csvimport/validation_benchmark_test.go`.
+- Added benchmark cases for 100, 1,000 and 10,000 valid CSV rows.
+- Used `testing.B` sub-benchmarks and `b.ReportAllocs()`.
+- Added a package-level sink to avoid benchmark dead-code elimination.
+
+#### Benchmark Results
+
+- `100_rows`: `119705 ns/op`, `53240 B/op`, `227 allocs/op`.
+- `1000_rows`: `1110757 ns/op`, `402042 B/op`, `2030 allocs/op`.
+- `10000_rows`: `12646587 ns/op`, `6126470 B/op`, `20038 allocs/op`.
+
+#### Tests
+
+- Verified with `go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No production-code optimization was made. L14.1 intentionally establishes measurement before changing implementation.
+
+#### Code Review
+
+An experienced Go engineer would approve the benchmark as a useful first baseline. It measures a real import path, reports allocations and avoids obvious benchmark mistakes such as generating test input inside the measured loop.
+
+The main caveat is that this is still a package-level benchmark, not an end-to-end import benchmark with PostgreSQL persistence. That is acceptable for the first lesson; later profiling should decide whether validation, persistence or HTTP handling is the real bottleneck.
+
+#### Exercises
+
+- Run the benchmark three times and compare result variance.
+- Move CSV generation inside the measured loop and explain why the benchmark becomes less useful.
+- Add a mixed valid/invalid CSV benchmark and compare allocations with the all-valid case.
+
+#### Interview Questions
+
+- Why does `b.N` exist instead of writing a fixed loop count?
+- Why should benchmark input generation usually stay outside the measured loop?
+- What does `B/op` measure, and why does it matter to the garbage collector?
+- Why should a benchmark result lead to profiling before optimization?
+
+#### Roadmap Update
+
+- Lesson 14.1 completed.
+- Current lesson moved to Lesson 14.2.
+- Testing `Benchmarks` and Performance `benchmarks` marked complete in the Knowledge Matrix.
+
+### Lesson 14.2 Scope
+
+Use `pprof` CPU and memory profiles on the CSV validation benchmark to learn where time and allocations are spent before deciding whether any optimization is justified.
+
+#### Business Context
+
+Benchmarks show how fast a code path is. Profiles explain where that time and memory go. CSV import is a natural target because it may process large historical files.
+
+#### Problem
+
+The L14.1 benchmark produced numbers, but numbers alone do not identify the hot functions or allocation sources. Optimizing from benchmark totals alone would still be guesswork.
+
+#### Design Discussion
+
+L14.2 should generate CPU and memory profiles from the existing benchmark using Go's built-in benchmark flags. The lesson should inspect the profiles with `go tool pprof` and document the top costs before making any code changes.
+
+Optimization remains optional. If the profile shows the current implementation is acceptable for MVP scale, the correct engineering decision may be to keep the code unchanged.
+
+#### Go Concepts
+
+- `runtime/pprof` through `go test` profile flags
+- CPU profiles versus memory profiles
+- interpreting flat and cumulative cost
+- allocation profiles and garbage collector pressure
+- measurement-driven optimization discipline
+
+#### Architecture Concepts
+
+- profiling before optimization
+- separating local package hot spots from end-to-end system bottlenecks
+- preserving readability unless profiling proves a change is worthwhile
+
+#### Tests
+
+- Generate a CPU profile from the CSV validation benchmark.
+- Generate a memory profile from the CSV validation benchmark.
+- Inspect top profile entries with `go tool pprof`.
+- Keep correctness tests, build, vet and lint passing.
+
+#### Exercises
+
+- Compare CPU profile output for 1,000 and 10,000 row benchmarks.
+- Inspect allocation sources and predict which ones are unavoidable because CSV parsing creates strings.
+- Decide whether a code optimization is justified or whether the benchmark should simply remain as a regression guard.
+
+#### Interview Questions
+
+- What is the difference between benchmarking and profiling?
+- What do flat and cumulative pprof costs mean?
+- Why can reducing allocations improve latency even when CPU time looks acceptable?
+- Why should readability usually win unless profiling proves a hot path needs optimization?
 
 ### Goal
 
