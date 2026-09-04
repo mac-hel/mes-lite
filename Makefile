@@ -41,7 +41,9 @@ test-cover: ## Run tests with coverage
 	go tool cover -html=coverage.out -o coverage.html
 
 bench:
-	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem
+	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem \
+	&& GOMAXPROCS=1 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s \
+	&& GOMAXPROCS=8 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s
 
 prof:
 	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -cpuprofile "/tmp/opencode/csvimport_cpu.out" -memprofile "/tmp/opencode/csvimport_mem.out" \
@@ -62,6 +64,9 @@ prof-escape2:
 
 prof-lines:
 	go tool pprof -list ValidateProductionEntries
+
+gc-trace:
+	GODEBUG=gctrace=1 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s
 
 install-tools:
 	go install github.com/air-verse/air@latest

@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.56
+**Version:** 2.57
 **Status:** IN PROGRESS
 **Current milestone:** 14 - Performance Engineering
-**Current lesson:** L14.4 - Runtime Scheduler & Garbage Collector Review
+**Current lesson:** L14.5 - Performance Review & Optimization Discipline
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -102,7 +102,7 @@ The AI should update it after every completed milestone.
 - [x] sync/atomic
 - [x] database/sql (concepts)
 - [x] log/slog
-- [ ] runtime
+- [x] runtime
 - [ ] embed
 
 **Concurrency**
@@ -149,8 +149,8 @@ The AI should update it after every completed milestone.
 - [x] Race Detection
 
 **Runtime**
-- [ ] Scheduler
-- [ ] Garbage Collector
+- [x] Scheduler
+- [x] Garbage Collector
 - [x] Escape Analysis
 - [ ] Memory Layout
 
@@ -8336,7 +8336,7 @@ Status
 - **L14.1** — Benchmarking Foundations ✅
 - **L14.2** — pprof CPU & Memory Profiling ✅
 - **L14.3** — Allocation Analysis & Escape Analysis ✅
-- **L14.4** — Runtime Scheduler & Garbage Collector Review
+- **L14.4** — Runtime Scheduler & Garbage Collector Review ✅
 - **L14.5** — Performance Review & Optimization Discipline
 
 ### Lesson 14.1 Scope
@@ -8761,6 +8761,119 @@ Any code change should be avoided unless the runtime evidence reveals a simple c
 - What is `GOMAXPROCS`?
 - Why is Go's garbage collector concurrent instead of stop-the-world for the whole collection?
 - How can allocation-heavy code affect latency?
+
+### Lesson 14.4 Completion Notes
+
+#### Business Context
+
+MES Lite now connects benchmark allocation data to runtime behavior. This matters because large CSV imports can create garbage collector work and compete for CPU with HTTP request handling and background workers.
+
+#### Problem
+
+Benchmarks, pprof and escape analysis showed where time and allocations happen, but they did not yet explain how the Go runtime reacts to allocation-heavy code or how scheduler parallelism changes benchmark execution.
+
+#### Design Discussion
+
+L14.4 used the existing CSV validation benchmark as runtime evidence instead of adding a feature. The benchmark was run with `GODEBUG=gctrace=1` to observe garbage collection and with different `GOMAXPROCS` values to observe scheduler capacity effects.
+
+The GC trace showed frequent collections during the benchmark because each operation still allocates around 5.1 MB. The trace also showed small stop-the-world phases around concurrent GC work, which is the important production lesson: Go's collector is concurrent, but allocation-heavy code still creates runtime work and some pauses.
+
+The `GOMAXPROCS` comparison showed that CPU parallelism can improve throughput for benchmark execution, but it does not change the allocation shape. Both runs kept `5166xxx B/op` and `10038 allocs/op`.
+
+#### Runtime Results
+
+- Default `GOMAXPROCS=8` with GC tracing: `12585191 ns/op`, `5166480 B/op`, `10038 allocs/op`.
+- `GOMAXPROCS=1`: `14300800 ns/op`, `5166463 B/op`, `10038 allocs/op`.
+- `GOMAXPROCS=8`: `12210447 ns/op`, `5166486 B/op`, `10038 allocs/op`.
+- GC trace during the benchmark showed hundreds of small collections over the run, with reported GC CPU around `3%` in the main benchmark process.
+
+#### Tests
+
+- Ran `GODEBUG=gctrace=1 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s`.
+- Ran `GOMAXPROCS=1 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s`.
+- Ran `GOMAXPROCS=8 go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -benchtime=2s`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No code refactor was applied. The correct output of this lesson was runtime understanding, not another optimization.
+
+#### Code Review
+
+An experienced Go engineer would approve not changing code in this lesson. The runtime evidence reinforces the L14.3 allocation improvement and shows where future work should focus: reduce allocation rate only when the production import path proves it matters.
+
+The main architecture reminder is that background imports must stay bounded. Unbounded goroutines or unbounded in-memory buffering would compete with HTTP handlers for scheduler time and increase GC pressure.
+
+#### Exercises
+
+- Run the same benchmark with `GOGC=off` and explain why that is not a production solution.
+- Run the benchmark with `GOMAXPROCS=2` and compare it with `1` and `8`.
+- Identify one background-job configuration that could overload the scheduler under many imports.
+
+#### Interview Questions
+
+- What is the relationship between goroutines, OS threads and `GOMAXPROCS`?
+- Why can allocation-heavy code increase latency even when individual GC pauses are small?
+- What do the three heap numbers in a GC trace line roughly represent?
+- Why does increasing `GOMAXPROCS` not reduce `allocs/op`?
+
+#### Roadmap Update
+
+- Lesson 14.4 completed.
+- Current lesson moved to Lesson 14.5.
+- Standard Library `runtime`, Runtime `Scheduler` and Runtime `Garbage Collector` marked complete in the Knowledge Matrix.
+
+### Lesson 14.5 Scope
+
+Close Milestone 14 with a performance-engineering review: summarize benchmark, profile, allocation and runtime findings, then define the optimization discipline MES Lite should follow before production readiness.
+
+#### Business Context
+
+Performance work should keep the application responsive as data grows, but it must not make MVP code harder to maintain without evidence. The project needs a clear standard for future performance changes.
+
+#### Problem
+
+Milestone 14 introduced benchmarks, pprof, allocation analysis and runtime review. Before moving to production readiness, those findings should be reviewed together and converted into practical engineering rules.
+
+#### Design Discussion
+
+L14.5 should be a milestone review and discipline lesson. It should not add a new optimization unless review finds a small, proven issue. The expected output is a documented performance baseline, known caveats and criteria for future changes such as PostgreSQL `COPY`, route-template metrics, durable jobs or database profiling.
+
+#### Go Concepts
+
+- comparing benchmark runs responsibly
+- separating throughput, latency and allocation goals
+- avoiding benchmark overfitting
+- recognizing when not to optimize
+
+#### Architecture Concepts
+
+- performance budget thinking
+- production-like data before database optimization
+- code readability as a performance trade-off
+- milestone review before production readiness
+
+#### Tests
+
+- Re-run benchmark and verification commands.
+- Review whether the one L14.3 optimization remains justified.
+- Keep correctness tests, build, vet and lint passing.
+
+#### Exercises
+
+- Write a performance-change checklist for future PRs.
+- Decide when CSV import should move from regular inserts to `COPY`.
+- Identify which endpoint should get an end-to-end benchmark next.
+
+#### Interview Questions
+
+- How do you decide whether an optimization is worth it?
+- Why can benchmarks lie?
+- What is the difference between improving throughput and reducing tail latency?
+- Why should production-like data guide SQL performance work?
 
 ### Goal
 

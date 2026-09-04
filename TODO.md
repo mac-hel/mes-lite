@@ -134,6 +134,10 @@ In the code, settings are behind facade/abstraction - this will allow to impleme
 By default all goes to stdout, but where should be exported for each Company/Factory?
 1 Collector per Factory?
 
+## Performance requirements - define for AI
+- expected users/requests num
+- expected load (csv imports etc.)
+- what else?
 
 
 
