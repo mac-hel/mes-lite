@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.55
+**Version:** 2.56
 **Status:** IN PROGRESS
 **Current milestone:** 14 - Performance Engineering
-**Current lesson:** L14.3 - Allocation Analysis & Escape Analysis
+**Current lesson:** L14.4 - Runtime Scheduler & Garbage Collector Review
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -151,7 +151,7 @@ The AI should update it after every completed milestone.
 **Runtime**
 - [ ] Scheduler
 - [ ] Garbage Collector
-- [ ] Escape Analysis
+- [x] Escape Analysis
 - [ ] Memory Layout
 
 **HTTP**
@@ -169,7 +169,7 @@ The AI should update it after every completed milestone.
 - [x] pprof
 - [ ] trace
 - [x] benchmarks
-- [ ] allocations
+- [x] allocations
 
 ---
 
@@ -8335,7 +8335,7 @@ Status
 
 - **L14.1** — Benchmarking Foundations ✅
 - **L14.2** — pprof CPU & Memory Profiling ✅
-- **L14.3** — Allocation Analysis & Escape Analysis
+- **L14.3** — Allocation Analysis & Escape Analysis ✅
 - **L14.4** — Runtime Scheduler & Garbage Collector Review
 - **L14.5** — Performance Review & Optimization Discipline
 
@@ -8629,6 +8629,138 @@ The likely candidates are result-slice growth in collect-all validation and benc
 - What makes a value escape to the heap?
 - Why are fewer allocations not automatically better if the code becomes harder to maintain?
 - How does slice capacity affect allocations?
+
+### Lesson 14.3 Completion Notes
+
+#### Business Context
+
+MES Lite's CSV import reader now avoids one allocation class per CSV row while keeping the same streaming API and import behavior.
+
+#### Problem
+
+The L14.2 memory profile showed allocation pressure in CSV validation. The next step was to distinguish unavoidable allocations from avoidable ones and verify any change with benchmarks instead of assuming it helped.
+
+#### Design Discussion
+
+The allocation profile showed that `ValidateProductionEntries` allocates heavily when appending every valid record into a result slice. That is expected for this collect-all helper. The production import service already avoids this shape by validating and saving records in bounded batches.
+
+The more useful finding was in `encoding/csv.(*Reader).readRecord`, which dominated allocated objects. Go's standard CSV reader supports `ReuseRecord`, which reuses the returned `[]string` backing array between reads. That is safe here because `ProductionEntryReader.Read` immediately copies fields into a `ProductionEntryRow` struct and never exposes the raw CSV record slice to callers.
+
+Escape analysis confirmed the expected heap allocations: returned readers, result slices, error formatting paths and append-backed collections escape. Those are normal for this API shape. The chosen change only removes avoidable per-row CSV record-slice allocation.
+
+#### Implementation
+
+- Enabled `csv.Reader.ReuseRecord` in `NewProductionEntryReader`.
+- Kept `ProductionEntryReader.Read` API unchanged.
+- Kept validation and import service behavior unchanged.
+- Left collect-all `ValidateProductionEntries` unchanged because the production service already uses bounded streaming batches.
+
+#### Benchmark Results
+
+Before `ReuseRecord` on `10000_rows`:
+
+- `13507771 ns/op`, `6126466 B/op`, `20038 allocs/op`.
+
+After `ReuseRecord`:
+
+- `100_rows`: `112674 ns/op`, `43640 B/op`, `127 allocs/op`.
+- `1000_rows`: `1071355 ns/op`, `306041 B/op`, `1030 allocs/op`.
+- `10000_rows`: `12707274 ns/op`, `5166480 B/op`, `10038 allocs/op`.
+
+The important improvement is allocation-related: 10,000-row validation now performs about 10,000 fewer allocations and allocates about 960 KB less per operation. Runtime changed within benchmark noise, so this lesson does not claim a proven CPU-speed improvement.
+
+#### Tests
+
+- Inspected allocation source lines with `go tool pprof -list ValidateProductionEntries /tmp/opencode/csvimport_l143_mem_before.out`.
+- Ran package escape analysis with `go build -gcflags='github.com/mac-hel/mes-lite/internal/csvimport=-m=2' ./internal/csvimport`.
+- Compared benchmarks with `go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -memprofile /tmp/opencode/csvimport_l143_mem_before.out`.
+- Compared after-change memory profile with `go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -memprofile /tmp/opencode/csvimport_l143_mem_after.out`.
+- Verified full benchmark suite with `go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem`.
+- Verified with `go test ./internal/csvimport -count=1`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No broad refactor was needed. The single-line `ReuseRecord` change is preferable to introducing a new validation API or preallocation heuristic because it reduces allocations without changing package contracts.
+
+#### Code Review
+
+An experienced Go engineer would approve this optimization because it is profile-guided, small and uses a standard-library feature exactly where ownership makes it safe.
+
+The review caveat is important: `ReuseRecord` would be unsafe if callers received and retained the raw `[]string` from `encoding/csv.Reader.Read`. MES Lite does not expose that slice; it maps fields into a struct before returning.
+
+#### Exercises
+
+- Disable `ReuseRecord` and rerun the benchmark to confirm the allocation difference.
+- Add a benchmark for mixed valid and invalid rows and compare error-allocation behavior.
+- Explain why preallocating `ValidationResult.Records` is not straightforward when reading from a stream.
+
+#### Interview Questions
+
+- What does it mean for a value to escape to the heap?
+- Why did `ValidateProductionEntries` allocate even though records are local variables in the loop?
+- Why is `csv.Reader.ReuseRecord` safe in this package but potentially unsafe in another API?
+- Why should allocation improvements be benchmarked instead of inferred from code inspection?
+
+#### Roadmap Update
+
+- Lesson 14.3 completed.
+- Current lesson moved to Lesson 14.4.
+- Runtime `Escape Analysis` and Performance `allocations` marked complete in the Knowledge Matrix.
+
+### Lesson 14.4 Scope
+
+Review Go runtime behavior using the CSV validation benchmark as evidence: scheduler basics, garbage collector pressure and how allocation rate affects runtime work.
+
+#### Business Context
+
+Performance-sensitive import paths do not run in isolation. High allocation rates can increase garbage collector work, and concurrent background imports share CPU time with HTTP request handling.
+
+#### Problem
+
+The project has benchmark and allocation data, but the runtime concepts behind those numbers have not been reviewed: what the scheduler does, when garbage collection runs and why allocation reduction can matter even when wall-clock time looks similar.
+
+#### Design Discussion
+
+L14.4 should be a review-and-measurement lesson, not a feature lesson. It should use benchmark output, `GODEBUG=gctrace=1` and runtime documentation-level analysis to connect code behavior with scheduler and garbage collector concepts.
+
+Any code change should be avoided unless the runtime evidence reveals a simple correctness or lifecycle issue. The goal is interview readiness and production reasoning, not micro-optimization.
+
+#### Go Concepts
+
+- goroutine scheduling overview
+- GOMAXPROCS and CPU parallelism
+- garbage collector roots and heap growth
+- allocation rate versus GC frequency
+- interpreting `GODEBUG=gctrace=1` output
+
+#### Architecture Concepts
+
+- runtime behavior as part of production performance review
+- avoiding unbounded background work that competes with request handling
+- connecting allocation profiles to garbage collector pressure
+
+#### Tests
+
+- Run the CSV validation benchmark with GC trace output.
+- Compare benchmark behavior with different `GOMAXPROCS` values if useful.
+- Keep correctness tests, build, vet and lint passing.
+
+#### Exercises
+
+- Explain why a lower allocation count can reduce GC pressure even if `ns/op` is similar.
+- Run the benchmark with `GOMAXPROCS=1` and compare the result with the default.
+- Identify one place where unbounded goroutines would compete with request handling.
+
+#### Interview Questions
+
+- What does the Go scheduler schedule?
+- What is `GOMAXPROCS`?
+- Why is Go's garbage collector concurrent instead of stop-the-world for the whole collection?
+- How can allocation-heavy code affect latency?
 
 ### Goal
 

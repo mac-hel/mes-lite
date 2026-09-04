@@ -47,6 +47,7 @@ type ProductionEntryReader struct {
 func NewProductionEntryReader(r io.Reader) (*ProductionEntryReader, error) {
 	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
+	reader.ReuseRecord = true
 	reader.TrimLeadingSpace = true
 
 	header, err := reader.Read()

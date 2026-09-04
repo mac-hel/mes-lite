@@ -49,6 +49,17 @@ prof:
 	&& go tool pprof -top -alloc_space "/tmp/opencode/csvimport_mem.out" \
 	&& go tool pprof -top -alloc_objects "/tmp/opencode/csvimport_mem.out"
 
+prof-escape:
+	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -memprofile "/tmp/opencode/csvimport_l143_mem_before.out" \
+	&& go test ./internal/csvimport -run '^$' -gcflags='all=-m'
+	#'fix formatting only
+
+prof-escape2:
+	go tool pprof -list 'ValidateProductionEntries' "/tmp/opencode/csvimport_l143_mem_before.out" \
+	&& go test ./internal/csvimport -run '^$' -gcflags='github.com/mac-hel/mes-lite/internal/csvimport=-m=2' \
+	&& go test ./internal/csvimport -run '^$' -gcflags='github.com/mac-hel/mes-lite/internal/csvimport=-m=2' 2>&1 | rg 'internal/csvimport/.+((escapes to heap)|(moved to heap)|(leaks to))' \
+	&& go build -gcflags='github.com/mac-hel/mes-lite/internal/csvimport=-m=2' ./internal/csvimport 2>&1 | rg 'internal/csvimport/.+((escapes to heap)|(moved to heap)|(leaks to))'
+
 prof-lines:
 	go tool pprof -list ValidateProductionEntries
 
