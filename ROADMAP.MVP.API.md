@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.57
+**Version:** 2.58
 **Status:** IN PROGRESS
-**Current milestone:** 14 - Performance Engineering
-**Current lesson:** L14.5 - Performance Review & Optimization Discipline
+**Current milestone:** 15 - Production Readiness
+**Current lesson:** L15.1 - Production Docker Image
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -42,11 +42,12 @@ This section must always reflect the current progress.
 - Milestone 11
 - Milestone 12
 - Milestone 13
-**Next milestone:** 15 - Production Readiness
+- Milestone 14
+**Next milestone:** None
 **Current branch:** main
-**Architecture maturity:** 9.0 / 10
-**Go knowledge progress:** 82%
-**Interview readiness:** 78%
+**Architecture maturity:** 9.1 / 10
+**Go knowledge progress:** 85%
+**Interview readiness:** 82%
 **Known technical debt:** Production reference foreign keys are `NOT VALID`, so PostgreSQL enforces new production entries but does not validate legacy rows created before the constraint. Query parameters are implemented for list endpoints; explicit OpenAPI query-parameter documentation should be reviewed later. Auth-user management is intentionally limited to durable bootstrap admin creation; full user-management CRUD is postponed until there is a concrete business workflow. CSV import uses bounded batch inserts with regular `INSERT` statements instead of PostgreSQL `COPY`; revisit if production-scale import performance requires it. Background jobs are in-memory only, so queued, running and completed job history is lost on restart; ADR 0004 records the durable-queue trigger. Async CSV import jobs use temporary upload files, so process crashes can leave orphaned temp files and lose queued imports until durable job storage exists. Background job status and cancellation APIs exist for individual jobs, but there is no job list endpoint yet. Machine events are currently accepted through a fake JWT-protected API and stored in memory only; deduplication and intake counters are in-memory only, events are not durable, events are not processed into production entries and machines are not authenticated with real machine credentials yet. HTTP tracing exists with no-op/stdout exporters only; OTLP collector export is not wired yet. The generated sqlc boundary is documented but not enforced: `internal/csvimport` imports `internal/production/productiondb` directly, and nested `internal/` directories would make that a compile error once CSV import stops reusing another slice's generated insert. The depguard platform rule uses a deny list naming each business slice, so adding a slice requires updating `.golangci.yml`.
 
 The AI must update this section at the end of every lesson and milestone.
@@ -7074,7 +7075,7 @@ Post-MVP examples:
 
 Status
 
-🔄 In Progress
+✅ Completed
 
 ### Lessons
 
@@ -8337,7 +8338,7 @@ Status
 - **L14.2** — pprof CPU & Memory Profiling ✅
 - **L14.3** — Allocation Analysis & Escape Analysis ✅
 - **L14.4** — Runtime Scheduler & Garbage Collector Review ✅
-- **L14.5** — Performance Review & Optimization Discipline
+- **L14.5** — Performance Review & Optimization Discipline ✅
 
 ### Lesson 14.1 Scope
 
@@ -8875,6 +8876,113 @@ L14.5 should be a milestone review and discipline lesson. It should not add a ne
 - What is the difference between improving throughput and reducing tail latency?
 - Why should production-like data guide SQL performance work?
 
+### Lesson 14.5 Completion Notes
+
+#### Business Context
+
+Milestone 14 is complete. MES Lite now has a repeatable performance baseline and a clear rule for future optimization: measure first, profile second, optimize only when the evidence justifies the complexity.
+
+#### Problem
+
+The project needed to close performance engineering as a discipline, not as a collection of isolated benchmark commands. The final review needed to decide whether the L14.3 optimization remained justified and whether more optimization should happen before production readiness.
+
+#### Design Discussion
+
+The CSV validation benchmark remains useful as a regression guard for a performance-sensitive import path. It is not a replacement for production-scale import testing because it does not include PostgreSQL writes, HTTP upload handling, background-job scheduling or real file I/O.
+
+The only code optimization made in the milestone, enabling `csv.Reader.ReuseRecord`, remains justified. It is small, standard-library based, API-preserving and measurably reduces allocations. No additional optimization was made in L14.5 because no new profile evidence identified a production hot path worth complicating.
+
+The main discipline coming out of the milestone is this checklist for future performance PRs:
+
+- Start with a business-relevant symptom or risk.
+- Add or run a benchmark that captures the relevant path.
+- Use profiles to identify the real hot spot.
+- Prefer small standard-library or algorithmic improvements over clever rewrites.
+- Compare before and after using `benchmem`.
+- Keep correctness tests, build, vet and lint green.
+- Document what improved and what did not.
+
+#### Final Benchmark Baseline
+
+- `100_rows`: `57234 ns/op`, `43640 B/op`, `127 allocs/op`.
+- `1000_rows`: `519803 ns/op`, `306041 B/op`, `1030 allocs/op`.
+- `10000_rows`: `5708275 ns/op`, `5166468 B/op`, `10038 allocs/op`.
+
+Benchmark timing varies between runs, so allocation numbers are the more stable comparison for the L14.3 change.
+
+#### Tests
+
+- Re-ran `go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go build ./...`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+No L14.5 code refactor was applied. The milestone already made the only justified production change in L14.3.
+
+#### Code Review
+
+An experienced Go engineer would approve Milestone 14 because it improved performance maturity without overfitting the code to a benchmark. The codebase now has benchmark coverage, profile evidence, escape-analysis notes and one measured allocation improvement.
+
+The main caveat is that database and end-to-end API performance are not yet benchmarked. That is acceptable because production-scale performance work should use realistic data volumes and deployment conditions.
+
+#### Exercises
+
+- Add an end-to-end benchmark for synchronous CSV import using an in-memory store.
+- Define a production-like CSV import dataset size and expected throughput target.
+- Decide what evidence would justify replacing regular batch inserts with PostgreSQL `COPY`.
+
+#### Interview Questions
+
+- How would you investigate a slow Go endpoint in production?
+- Why should you avoid optimizing code that is not on the hot path?
+- Why can reducing allocations improve latency even if throughput barely changes?
+- What makes a benchmark representative enough to trust?
+
+#### Roadmap Update
+
+- Lesson 14.5 completed.
+- Milestone 14 completed.
+- Current milestone moved to Milestone 15.
+- Current lesson moved to Lesson 15.1.
+- Milestone 15 divided into lessons.
+- Architecture maturity, Go knowledge progress and interview readiness updated.
+
+### Milestone 14 Review
+
+#### Architecture Review
+
+An experienced Go engineer would approve the milestone direction. Performance work stayed tied to a real business path, CSV import validation, instead of introducing synthetic micro-optimizations across the codebase.
+
+The architecture lesson is restraint. CSV import already had a bounded streaming production path, so the milestone avoided rewriting that workflow based on a collect-all validation helper benchmark.
+
+#### Code Review
+
+The code change is intentionally tiny: `csv.Reader.ReuseRecord` reduces per-row allocations while preserving the package API. The benchmark file is explicit, uses `testing.B`, reports allocations and avoids measuring input generation.
+
+No generic performance framework, custom parser or premature PostgreSQL `COPY` path was introduced.
+
+#### Refactoring
+
+The only production refactor was enabling reusable CSV records at the reader boundary. This is the right place because the package owns the raw `[]string` and copies fields before returning typed rows.
+
+#### Interview Review
+
+You should now be able to explain Go benchmarking, `b.N`, `benchmem`, CPU profiles, allocation profiles, escape analysis, stack versus heap basics, `GOMAXPROCS`, scheduler basics, garbage collector pressure and when not to optimize.
+
+#### Completion Criteria
+
+- CSV import validation benchmark implemented.
+- CPU and memory profiles generated and reviewed.
+- Escape analysis reviewed for `internal/csvimport`.
+- One measured allocation improvement applied with `csv.Reader.ReuseRecord`.
+- Runtime scheduler and garbage collector behavior reviewed with benchmark evidence.
+- Optimization discipline documented.
+- Tests, build, vet and lint pass.
+- Roadmap updated.
+
 ### Goal
 
 Understand how Go applications perform and how to optimize them.
@@ -8946,7 +9054,50 @@ The application remains responsive as usage grows.
 
 Status
 
-⬜ Not Started
+🔄 In Progress
+
+### Lessons
+
+- **L15.1** — Production Docker Image
+- **L15.2** — Configuration & Secrets Review
+- **L15.3** — CI/CD, Smoke Tests & Release Checks
+- **L15.4** — Versioning, Build Metadata & Static Assets
+- **L15.5** — Production Readiness Review & Roadmap Closure
+
+### Lesson 15.1 Scope
+
+Create or review the production Docker image so MES Lite can be built and run as a deployable Go service artifact.
+
+#### Business Context
+
+The application is only production-ready if it can be packaged reproducibly. A reliable Docker image is the deployment unit most teams would use for this kind of API service.
+
+#### Problem
+
+The project has Docker development support, but production readiness requires reviewing whether the runtime image is small, predictable, non-root where practical and able to run the compiled server binary with the required configuration.
+
+#### Design Discussion
+
+L15.1 should focus on the deployable artifact, not the whole release process. Build metadata, CI hardening and smoke tests belong to later lessons so Docker image construction stays clear.
+
+#### Go Concepts
+
+- Go binary builds
+- static versus dynamic runtime needs
+- linker flags introduction if already needed
+- environment-based configuration at runtime
+
+#### Architecture Concepts
+
+- deployment artifact as part of production design
+- separating build-time and runtime concerns
+- avoiding development-only tooling in production images
+
+#### Tests
+
+- Build the production image or validate the Dockerfile.
+- Run the container enough to confirm startup behavior or configuration errors are clear.
+- Keep normal tests, build, vet and lint passing.
 
 ### Goal
 
