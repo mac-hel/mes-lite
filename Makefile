@@ -40,6 +40,18 @@ test-cover: ## Run tests with coverage
 	go test ./... -v -count=1 -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 
+bench:
+	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries$' -benchmem
+
+prof:
+	go test ./internal/csvimport -run '^$' -bench '^BenchmarkValidateProductionEntries/10000_rows$' -benchmem -cpuprofile "/tmp/opencode/csvimport_cpu.out" -memprofile "/tmp/opencode/csvimport_mem.out" \
+	&& go tool pprof -top "/tmp/opencode/csvimport_cpu.out" \
+	&& go tool pprof -top -alloc_space "/tmp/opencode/csvimport_mem.out" \
+	&& go tool pprof -top -alloc_objects "/tmp/opencode/csvimport_mem.out"
+
+prof-lines:
+	go tool pprof -list ValidateProductionEntries
+
 install-tools:
 	go install github.com/air-verse/air@latest
 	echo "install 'golangci-lint' with your package manager, e.g.: pacman -S golangci-lint"
@@ -80,7 +92,7 @@ db-sql:
 	docker compose exec -T postgres psql -U meslite -d meslite -c "select version_id, is_applied from goose_db_version order by id;"
 
 teach-continue:
-	opencode -s ses_fa79a987cffew620v1GPDraOne
+	opencode -s ses_f9cdccfb6ffe9JT7A8EwV1mTD0
 
 # peak hours: 3-6 i 9-12
 opencode-ds-r:
