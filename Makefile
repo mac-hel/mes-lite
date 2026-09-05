@@ -9,13 +9,17 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 APP_NAME = mes-lite
 CMD_DIR = ./cmd/server
 BUILD_DIR = ./out
+VERSION ?= dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf none)
+BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS = -X github.com/mac-hel/mes-lite/internal/platform/version.Version=$(VERSION) -X github.com/mac-hel/mes-lite/internal/platform/version.Commit=$(COMMIT) -X github.com/mac-hel/mes-lite/internal/platform/version.BuildTime=$(BUILD_TIME)
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the server binary
-	go build -o $(BUILD_DIR)/$(APP_NAME) $(CMD_DIR)
+	go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME) $(CMD_DIR)
 
 run: ## Run the server (with air if available, otherwise go run)
 	@if command -v air > /dev/null 2>&1; then \
@@ -101,7 +105,7 @@ docker-down: ## Stop development environment
 	docker compose down
 
 docker-build: ## Build the production Docker image
-	docker build -t mes-lite:local .
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_TIME=$(BUILD_TIME) -t mes-lite:local .
 
 docker-run: ## Run the production Docker image
 	docker run --rm mes-lite:local

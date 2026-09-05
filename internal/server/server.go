@@ -179,12 +179,8 @@ func healthHandler(c fuego.ContextNoBody) (healthResponse, error) {
 	return healthResponse{Status: "ok"}, nil
 }
 
-type versionResponse struct {
-	Version string `json:"version"`
-}
-
-func versionHandler(c fuego.ContextNoBody) (versionResponse, error) {
-	return versionResponse{Version: version.String()}, nil
+func versionHandler(c fuego.ContextNoBody) (version.Info, error) {
+	return version.Current(), nil
 }
 
 // Start runs the server and blocks until SIGINT or SIGTERM is received,

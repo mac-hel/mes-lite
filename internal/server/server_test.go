@@ -19,6 +19,7 @@ import (
 	"github.com/mac-hel/mes-lite/internal/platform/config"
 	"github.com/mac-hel/mes-lite/internal/platform/jobs"
 	platformlogging "github.com/mac-hel/mes-lite/internal/platform/logging"
+	"github.com/mac-hel/mes-lite/internal/platform/version"
 	"github.com/mac-hel/mes-lite/internal/production"
 	"github.com/mac-hel/mes-lite/internal/products"
 	"github.com/mac-hel/mes-lite/internal/reporting"
@@ -256,13 +257,19 @@ func TestVersionEndpoint(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var body versionResponse
+	var body version.Info
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
 
 	if body.Version != "dev" {
 		t.Errorf("expected version 'dev', got %q", body.Version)
+	}
+	if body.Commit != "none" {
+		t.Errorf("expected commit 'none', got %q", body.Commit)
+	}
+	if body.BuildTime != "unknown" {
+		t.Errorf("expected build time 'unknown', got %q", body.BuildTime)
 	}
 }
 

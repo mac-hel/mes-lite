@@ -9,7 +9,7 @@ At every phase (point) whole Process should be made from begining to end.
 
 ### ONE-TIME Process prerequisites
 - refine `docs/*`
-    - <current> docs/01-product/product-context.md
+    - <current> docs/03-architecture/offline-sync.md
 - move all "Lesson Scope" and "Lesson Completion Notes" out of ROADMAP to lessons dir
     - replace with references to lesson file
 

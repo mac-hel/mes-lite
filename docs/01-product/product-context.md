@@ -190,6 +190,16 @@ MESLite runs in factory environments where:
 
 A core product principle is that IT failure should not unnecessarily become a production stoppage. Detailed offline, synchronization, and recovery guarantees are defined in `../03-architecture/offline-sync.md`.
 
+## Production work structure
+
+MESLite should support flexible production work structures.
+
+In the simplest case, a production order may contain one or more products or outputs with planned quantities. In more complex cases, production work may be grouped by batch, delivery, installation site, project phase, customer section, team, workstation, or another operational reason.
+
+MESLite must not assume that all factories naturally follow a single rigid hierarchy such as order -> product -> operation. Where operations are used, they represent manufacturing steps required to execute production work. Actual execution is recorded through work entries containing operator, workstation, time, quantity, rejects, scrap, downtime, status, and other production outcomes where applicable.
+
+The initial model should remain simple, but should not prevent later support for work packages, batches, routings, operation sequences, parallel steps, or non-order-based production runs.
+
 ## Product principles
 
 ### Simplicity over feature count

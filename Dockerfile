@@ -13,11 +13,21 @@ RUN go mod download
 
 COPY . .
 
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_TIME=unknown
+
 # CGO is disabled so the binaries do not depend on system C libraries at
 # runtime. GOOS=linux makes the build target explicit, and -trimpath removes
 # local filesystem paths from the compiled binaries for more reproducible builds.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/mes-lite ./cmd/server \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/migrate ./cmd/migrate
+# The -ldflags values stamp release metadata into the binaries so /version,
+# logs and traces can identify the exact artifact that is running.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-X github.com/mac-hel/mes-lite/internal/platform/version.Version=${VERSION} -X github.com/mac-hel/mes-lite/internal/platform/version.Commit=${COMMIT} -X github.com/mac-hel/mes-lite/internal/platform/version.BuildTime=${BUILD_TIME}" \
+    -o /out/mes-lite ./cmd/server \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-X github.com/mac-hel/mes-lite/internal/platform/version.Version=${VERSION} -X github.com/mac-hel/mes-lite/internal/platform/version.Commit=${COMMIT} -X github.com/mac-hel/mes-lite/internal/platform/version.BuildTime=${BUILD_TIME}" \
+    -o /out/migrate ./cmd/migrate
 
 # Alpine keeps the runtime image small while still making it easy to add the few
 # OS files this service needs, such as CA certificates and timezone data.

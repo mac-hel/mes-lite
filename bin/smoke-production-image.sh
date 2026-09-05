@@ -38,7 +38,28 @@ done
 
 curl -fsS "http://127.0.0.1:$HOST_PORT/health" >/dev/null
 curl -fsS "http://127.0.0.1:$HOST_PORT/ready" >/dev/null
-curl -fsS "http://127.0.0.1:$HOST_PORT/version" >/dev/null
+version_response=$(curl -fsS "http://127.0.0.1:$HOST_PORT/version")
 curl -fsS "http://127.0.0.1:$HOST_PORT/metrics" >/dev/null
+
+if [ "${EXPECTED_VERSION:-}" != "" ]; then
+	case "$version_response" in
+	*"\"version\":\"$EXPECTED_VERSION\""*) ;;
+	*) echo "expected /version to contain version $EXPECTED_VERSION, got: $version_response" >&2; exit 1 ;;
+	esac
+fi
+
+if [ "${EXPECTED_COMMIT:-}" != "" ]; then
+	case "$version_response" in
+	*"\"commit\":\"$EXPECTED_COMMIT\""*) ;;
+	*) echo "expected /version to contain commit $EXPECTED_COMMIT, got: $version_response" >&2; exit 1 ;;
+	esac
+fi
+
+if [ "${EXPECTED_BUILD_TIME:-}" != "" ]; then
+	case "$version_response" in
+	*"\"buildTime\":\"$EXPECTED_BUILD_TIME\""*) ;;
+	*) echo "expected /version to contain build time $EXPECTED_BUILD_TIME, got: $version_response" >&2; exit 1 ;;
+	esac
+fi
 
 docker logs "$CONTAINER_NAME" >/dev/null
