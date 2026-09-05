@@ -1,0 +1,16 @@
+.git
+.github
+.githooks
+.env
+coverage.out
+coverage.html
+out/
+tmp/
+*.test
+*.out
+ROADMAP*.md
+.agents/
+.claude/
+.opencode/
+docs/
+.personal

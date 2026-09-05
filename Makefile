@@ -4,7 +4,7 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 %:
 	@:
 
-.PHONY: build test lint clean run migrate sqlc help
+.PHONY: build test lint clean run migrate sqlc help docker-build
 
 APP_NAME = mes-lite
 CMD_DIR = ./cmd/server
@@ -100,6 +100,13 @@ docker-down: ## Stop development environment
 	fi
 	docker compose down
 
+docker-build: ## Build the production Docker image
+	docker build -t mes-lite:local .
+
+docker-run: ## Run the production Docker image
+	docker run --rm mes-lite:local
+	#docker run --rm --entrypoint /bin/sh mes-lite:local -c 'id -u && id -g && test -x /app/mes-lite && test -x /app/migrate && test -d /app/migrations'
+
 self-request:
 	./bin/self-request.sh
 
@@ -108,7 +115,8 @@ db-sql:
 	docker compose exec -T postgres psql -U meslite -d meslite -c "select version_id, is_applied from goose_db_version order by id;"
 
 teach-continue:
-	opencode -s ses_f9cdccfb6ffe9JT7A8EwV1mTD0
+	# new
+	#opencode -s ses_f9cdccfb6ffe9JT7A8EwV1mTD0
 
 # peak hours: 3-6 i 9-12
 opencode-ds-r:
