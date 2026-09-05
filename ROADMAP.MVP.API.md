@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.60
+**Version:** 2.61
 **Status:** IN PROGRESS
 **Current milestone:** 15 - Production Readiness
-**Current lesson:** L15.3 - CI/CD, Smoke Tests & Release Checks
+**Current lesson:** L15.4 - Versioning, Build Metadata & Static Assets
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -9060,7 +9060,7 @@ Status
 
 - **L15.1** — Production Docker Image ✅
 - **L15.2** — Configuration & Secrets Review ✅
-- **L15.3** — CI/CD, Smoke Tests & Release Checks
+- **L15.3** — CI/CD, Smoke Tests & Release Checks ✅
 - **L15.4** — Versioning, Build Metadata & Static Assets
 - **L15.5** — Production Readiness Review & Roadmap Closure
 
@@ -9253,6 +9253,87 @@ The main remaining production-readiness work is release verification: CI should 
 
 - Lesson 15.2 completed.
 - Current lesson moved to Lesson 15.3.
+- Milestone 15 remains in progress.
+
+### Lesson 15.3 Scope
+
+Add CI and local smoke-test checks that prove the production Docker image can run migrations and serve core operational endpoints against PostgreSQL.
+
+#### Business Context
+
+A production Docker image is useful only if the release pipeline verifies it. Teams should not discover image, migration or startup failures for the first time during deployment.
+
+#### Problem
+
+The CI workflow built and tested Go code, but it did not build the production image or run the container. L15.1 proved image construction locally, and L15.2 proved startup configuration failures, but CI still had no release-artifact smoke test.
+
+#### Design Discussion
+
+Added a reusable shell script instead of placing all smoke-test logic directly in the GitHub Actions YAML. The script can run both locally and in CI with the same behavior: run migrations from the production image, start the server image against PostgreSQL and check operational endpoints.
+
+The smoke test stays intentionally small. It verifies deployment mechanics and basic process health, not every business endpoint. Full API correctness remains covered by Go tests.
+
+#### Go Concepts
+
+- no new Go language feature; this lesson focuses on production verification
+- process configuration through environment variables
+- release checks as executable documentation
+
+#### Architecture Concepts
+
+- CI verifies the deployable artifact, not only source code
+- smoke tests validate integration wiring at deployment boundaries
+- migration execution is part of release readiness
+- operational endpoints provide safe release checks
+
+#### Implementation
+
+- Added `bin/smoke-production-image.sh`.
+- The smoke script runs `/app/migrate` from the production image.
+- The smoke script starts the production server container with `DATABASE_URL` and `JWT_SECRET`.
+- The smoke script checks `/health`, `/ready`, `/version` and `/metrics`.
+- Added `make docker-smoke` for local smoke-test execution.
+- Updated GitHub Actions to build `mes-lite:ci`.
+- Updated GitHub Actions to run the production-image smoke test against the PostgreSQL service.
+
+#### Tests
+
+- Verified Docker image build with `docker build -t mes-lite:local .`.
+- Started local PostgreSQL with `docker compose up -d postgres` after the first smoke run showed the database was not reachable.
+- Verified the production-image smoke test locally with `HOST_PORT=19090 sh ./bin/smoke-production-image.sh`.
+- Verified with `go build ./...`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+- Verified CI-style tests with `go test ./... -v -count=1 -race -shuffle=on`.
+
+#### Refactoring
+
+No application code changed. The lesson added release verification around the existing production image and operational endpoints.
+
+#### Code Review
+
+An experienced Go engineer would approve adding smoke tests at the image level because they catch a different class of failure than package tests: missing runtime files, broken entrypoints, migration path mistakes and container networking assumptions.
+
+The main caveat is that the smoke test uses the GitHub Actions PostgreSQL service through `host.docker.internal`. That is appropriate for this pipeline shape, but a future Compose-based or Kubernetes-based release test may use container networking differently.
+
+#### Exercises
+
+- Break the Dockerfile migration path and confirm the smoke test fails before the server starts.
+- Add a smoke check that logs in with a bootstrap admin and compare the extra confidence with the cost of managing test credentials.
+- Decide whether CI should push the image only after smoke tests pass.
+
+#### Interview Questions
+
+- What is the difference between unit tests, integration tests and smoke tests?
+- Why should CI build the production image instead of only running `go build`?
+- Why run migrations from the same artifact that will be deployed?
+- What kinds of bugs can image-level smoke tests catch that Go tests cannot?
+
+#### Roadmap Update
+
+- Lesson 15.3 completed.
+- Current lesson moved to Lesson 15.4.
 - Milestone 15 remains in progress.
 
 ### Goal

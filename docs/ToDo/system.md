@@ -4,7 +4,8 @@
 
 ## local development
 - Containerize local app (currently only DB is in container)
-- corelate with production builds
+- corelate/standardize with production containers
+- auto-run tests/smoke tests/etc. before push to remote repo
 
 ## CI/CD pipeline
 inspect and make it useful

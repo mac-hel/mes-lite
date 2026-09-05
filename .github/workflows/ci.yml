@@ -46,3 +46,13 @@ jobs:
 
       - name: Test
         run: go test ./... -v -count=1 -race -shuffle=on
+
+      - name: Build production Docker image
+        run: docker build -t mes-lite:ci .
+
+      - name: Smoke-test production Docker image
+        env:
+          IMAGE: mes-lite:ci
+          DATABASE_URL: postgres://meslite:meslite@host.docker.internal:5432/meslite?sslmode=disable
+          JWT_SECRET: ci-smoke-test-jwt-secret-with-at-least-32-characters
+        run: sh ./bin/smoke-production-image.sh

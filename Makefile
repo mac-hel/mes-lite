@@ -4,7 +4,7 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 %:
 	@:
 
-.PHONY: build test lint clean run migrate sqlc help docker-build
+.PHONY: build test lint clean run migrate sqlc help docker-build docker-smoke
 
 APP_NAME = mes-lite
 CMD_DIR = ./cmd/server
@@ -106,6 +106,9 @@ docker-build: ## Build the production Docker image
 docker-run: ## Run the production Docker image
 	docker run --rm mes-lite:local
 	#docker run --rm --entrypoint /bin/sh mes-lite:local -c 'id -u && id -g && test -x /app/mes-lite && test -x /app/migrate && test -d /app/migrations'
+
+docker-smoke: ## Smoke-test the production Docker image against PostgreSQL
+	sh ./bin/smoke-production-image.sh
 
 self-request:
 	./bin/self-request.sh
