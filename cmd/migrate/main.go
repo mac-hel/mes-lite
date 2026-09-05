@@ -29,6 +29,10 @@ func run() int {
 		return 1
 	}
 	slog.SetDefault(logger)
+	if err := cfg.ValidateMigrate(); err != nil {
+		slog.Error("validate config", "err", err)
+		return 1
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

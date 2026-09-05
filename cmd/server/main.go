@@ -42,6 +42,10 @@ func run() int {
 		return 1
 	}
 	slog.SetDefault(logger)
+	if err := cfg.ValidateServer(); err != nil {
+		slog.Error("validate config", "err", err)
+		return 1
+	}
 	traceProvider, err := tracing.NewProvider(ctx, tracing.Config{
 		ServiceName:    "mes-lite",
 		ServiceVersion: version.String(),
@@ -72,10 +76,6 @@ func run() int {
 		slog.Error("ping database", "err", err)
 		return 1
 	}
-	if cfg.JWTSecret == "" {
-		slog.Error("JWT_SECRET is required")
-		return 1
-	}
 	tokens, err := auth.NewTokenManager(cfg.JWTSecret)
 	if err != nil {
 		slog.Error("create token manager", "err", err)
@@ -84,10 +84,6 @@ func run() int {
 
 	authStore := auth.NewPostgresStore(db)
 	if cfg.AuthBootstrapEmail != "" || cfg.AuthBootstrapPassword != "" {
-		if cfg.AuthBootstrapEmail == "" || cfg.AuthBootstrapPassword == "" {
-			slog.Error("AUTH_BOOTSTRAP_EMAIL and AUTH_BOOTSTRAP_PASSWORD must be set together")
-			return 1
-		}
 		user, err := auth.NewUser("bootstrap-admin", cfg.AuthBootstrapEmail, cfg.AuthBootstrapPassword, auth.RoleAdmin)
 		if err != nil {
 			slog.Error("create bootstrap auth user", "err", err)

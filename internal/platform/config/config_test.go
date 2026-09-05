@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,8 +29,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("expected default port 9090, got %d", cfg.Port)
 	}
 
-	if cfg.DatabaseURL != "postgres://meslite:meslite@localhost:5432/meslite?sslmode=disable" {
-		t.Errorf("expected default database URL, got %s", cfg.DatabaseURL)
+	if cfg.DatabaseURL != "" {
+		t.Errorf("expected empty default database URL, got %s", cfg.DatabaseURL)
 	}
 
 	if cfg.MigrationsDir != "migrations" {
@@ -133,6 +134,93 @@ func TestAddr(t *testing.T) {
 
 	if got := cfg.Addr(); got != "0.0.0.0:9090" {
 		t.Errorf("expected 0.0.0.0:9090, got %s", got)
+	}
+}
+
+func TestValidateServer(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{
+			name: "valid minimal server config",
+			cfg: Config{
+				Host:          "0.0.0.0",
+				Port:          9090,
+				DatabaseURL:   "postgres://example",
+				MigrationsDir: "migrations",
+				JWTSecret:     "jwt-secret-with-at-least-32-characters",
+			},
+		},
+		{
+			name: "valid bootstrap pair",
+			cfg: Config{
+				Host:                  "0.0.0.0",
+				Port:                  9090,
+				DatabaseURL:           "postgres://example",
+				MigrationsDir:         "migrations",
+				JWTSecret:             "jwt-secret-with-at-least-32-characters",
+				AuthBootstrapEmail:    "admin@example.com",
+				AuthBootstrapPassword: "change-me-in-real-env",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.cfg.ValidateServer(); err != nil {
+				t.Fatalf("expected valid config, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateServerRejectsInvalidConfig(t *testing.T) {
+	valid := Config{
+		Host:          "0.0.0.0",
+		Port:          9090,
+		DatabaseURL:   "postgres://example",
+		MigrationsDir: "migrations",
+		JWTSecret:     "jwt-secret-with-at-least-32-characters",
+	}
+
+	tests := []struct {
+		name string
+		mut  func(*Config)
+	}{
+		{name: "missing host", mut: func(c *Config) { c.Host = " " }},
+		{name: "invalid port", mut: func(c *Config) { c.Port = 70000 }},
+		{name: "missing database url", mut: func(c *Config) { c.DatabaseURL = "" }},
+		{name: "missing migrations dir", mut: func(c *Config) { c.MigrationsDir = "" }},
+		{name: "missing jwt secret", mut: func(c *Config) { c.JWTSecret = "" }},
+		{name: "short jwt secret", mut: func(c *Config) { c.JWTSecret = "short" }},
+		{name: "bootstrap email without password", mut: func(c *Config) { c.AuthBootstrapEmail = "admin@example.com" }},
+		{name: "bootstrap password without email", mut: func(c *Config) { c.AuthBootstrapPassword = "secret" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := valid
+			tt.mut(&cfg)
+
+			err := cfg.ValidateServer()
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("expected ErrInvalidConfig, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateMigrateDoesNotRequireJWTSecret(t *testing.T) {
+	cfg := Config{
+		Host:          "0.0.0.0",
+		Port:          9090,
+		DatabaseURL:   "postgres://example",
+		MigrationsDir: "migrations",
+	}
+
+	if err := cfg.ValidateMigrate(); err != nil {
+		t.Fatalf("expected migration config without JWT secret to be valid, got %v", err)
 	}
 }
 

@@ -23,10 +23,10 @@ Proceed with the next Lesson of current Milestone.
 
 This section must always reflect the current progress.
 
-**Version:** 2.59
+**Version:** 2.60
 **Status:** IN PROGRESS
 **Current milestone:** 15 - Production Readiness
-**Current lesson:** L15.2 - Configuration & Secrets Review
+**Current lesson:** L15.3 - CI/CD, Smoke Tests & Release Checks
 **Completed milestones:**
 - Milestone 0
 - Milestone 1
@@ -9059,7 +9059,7 @@ Status
 ### Lessons
 
 - **L15.1** — Production Docker Image ✅
-- **L15.2** — Configuration & Secrets Review
+- **L15.2** — Configuration & Secrets Review ✅
 - **L15.3** — CI/CD, Smoke Tests & Release Checks
 - **L15.4** — Versioning, Build Metadata & Static Assets
 - **L15.5** — Production Readiness Review & Roadmap Closure
@@ -9166,6 +9166,93 @@ The image build and basic runtime checks pass locally. A full container smoke te
 
 - Lesson 15.1 completed.
 - Current lesson moved to Lesson 15.2.
+- Milestone 15 remains in progress.
+
+### Lesson 15.2 Scope
+
+Review runtime configuration and secret handling so the production image fails early and clearly when required deployment values are missing or invalid.
+
+#### Business Context
+
+Production deployments should not rely on hidden defaults for database endpoints, signing keys or bootstrap credentials. Operators need clear startup failures when required configuration is absent.
+
+#### Problem
+
+Configuration loading existed, but validation was split across command startup code and downstream constructors. `DATABASE_URL` also had an in-code local default containing development credentials, which is convenient locally but weak for production packaging.
+
+#### Design Discussion
+
+Added explicit validation methods to the platform config package. Server validation requires the common runtime settings plus `JWT_SECRET` and paired bootstrap credentials. Migration validation only requires the common database and migration settings, because schema migrations should not need authentication secrets.
+
+`DATABASE_URL` now has no in-code default. Local development should get that value from `.env` or `.env.template`, while production deployments must provide it through environment configuration or a secret manager.
+
+Validation runs after logger construction, so startup failures are emitted as structured logs when logging configuration is valid.
+
+#### Go Concepts
+
+- sentinel configuration errors with `errors.Is`
+- validation methods on configuration structs
+- separating common validation from process-specific validation
+- avoiding secret defaults in source code
+
+#### Architecture Concepts
+
+- configuration validation as a platform boundary
+- server and migration processes have different required settings
+- runtime secrets come from environment or secret management, not image layers
+- local defaults live in templates, not compiled production behavior
+
+#### Implementation
+
+- Added `config.ErrInvalidConfig`.
+- Added `Config.ValidateServer`.
+- Added `Config.ValidateMigrate`.
+- Added common validation for host, port, database URL and migrations directory.
+- Required server `JWT_SECRET` to be present and at least 32 characters.
+- Required bootstrap email and password to be configured together.
+- Removed the in-code default `DATABASE_URL`.
+- Updated `cmd/server` and `cmd/migrate` to validate configuration after logger setup.
+- Expanded `.env.template` with all supported runtime variables and placeholder-only secrets.
+
+#### Tests
+
+- Added config tests for valid server configuration.
+- Added config tests for invalid host, port, database URL, migrations directory, JWT secret and bootstrap pairs.
+- Added migration-validation test proving migrations do not require `JWT_SECRET`.
+- Verified Docker image rebuild with `docker build -t mes-lite:local .`.
+- Verified container startup returns structured config errors for missing `DATABASE_URL` and missing `JWT_SECRET`.
+- Verified with `go build ./...`.
+- Verified with `go test ./... -count=1`.
+- Verified with `go vet ./...`.
+- Verified with `golangci-lint run ./...`.
+
+#### Refactoring
+
+Startup validation moved out of ad-hoc checks in `cmd/server` and into the config package. The command packages still own process startup, but the rules for whether configuration is valid now live beside the configuration type.
+
+#### Code Review
+
+An experienced Go engineer would approve making deployment-critical values explicit. Removing the default database URL is a small local-development inconvenience, but it prevents the production artifact from silently trying development credentials or localhost.
+
+The main remaining production-readiness work is release verification: CI should build the production image and run smoke tests against a real PostgreSQL dependency.
+
+#### Exercises
+
+- Run the server with only `DATABASE_URL` set and explain why missing `JWT_SECRET` fails before dependencies are created.
+- Add an invalid `PORT=70000` to `.env` and confirm startup rejects it.
+- Decide which environment variables should be backed by a production secret manager.
+
+#### Interview Questions
+
+- Why should production secrets not have source-code defaults?
+- Why can migration commands require less configuration than the HTTP server?
+- Why is central config validation better than scattered startup checks?
+- Why should startup failures be structured logs?
+
+#### Roadmap Update
+
+- Lesson 15.2 completed.
+- Current lesson moved to Lesson 15.3.
 - Milestone 15 remains in progress.
 
 ### Goal

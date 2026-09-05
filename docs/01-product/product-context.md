@@ -6,8 +6,6 @@ Define why MESLite exists, who it is for, the manufacturing environment it serve
 
 This document is the product-level source of truth for evaluating scope, UX, product behavior, terminology, and whether a proposed feature belongs in MESLite.
 
-Detailed functional requirements belong in `requirements.md`. Detailed business entities, rules, workflows, and state transitions belong in `domain.md`. Deployment and implementation details belong in the architecture documents.
-
 ## Product vision
 
 MESLite is a lightweight Manufacturing Execution System (MES) for small and medium-sized manufacturers that have outgrown Excel, paper, or manual production reporting but do not need or want a large, complex MES/ERP implementation.
